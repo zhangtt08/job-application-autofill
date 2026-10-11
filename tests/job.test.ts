@@ -185,32 +185,32 @@ describe("variants schema 兼容", () => {
 describe("resolver 变体接线", () => {
   it("profileType 对应变体非空 → description 用变体文本", () => {
     const p = structuredClone(defaultProfile);
-    p.projects[0]!.descriptionMedium = "默认表达";
+    p.projects[0]!.description = "默认表达";
     p.projects[0]!.variants.aiProduct = "产品岗表达";
-    const v = resolveValue("project.description", p, { maxLength: 300, profileType: "aiProduct" });
+    const v = resolveValue("project.description", p, { profileType: "aiProduct" });
     expect(v?.value).toBe("产品岗表达");
   });
 
   it("变体为空 → 回退默认表达", () => {
     const p = structuredClone(defaultProfile);
-    p.projects[0]!.descriptionMedium = "默认表达";
-    const v = resolveValue("project.description", p, { maxLength: 300, profileType: "aiProduct" });
+    p.projects[0]!.description = "默认表达";
+    const v = resolveValue("project.description", p, { profileType: "aiProduct" });
     expect(v?.value).toBe("默认表达");
   });
 
   it("general / 未指定方向 → 默认表达", () => {
     const p = structuredClone(defaultProfile);
-    p.projects[0]!.descriptionMedium = "默认表达";
+    p.projects[0]!.description = "默认表达";
     p.projects[0]!.variants.aiProduct = "产品岗表达";
-    expect(resolveValue("project.description", p, { maxLength: 300, profileType: "general" })?.value).toBe("默认表达");
-    expect(resolveValue("project.description", p, { maxLength: 300 })?.value).toBe("默认表达");
+    expect(resolveValue("project.description", p, { profileType: "general" })?.value).toBe("默认表达");
+    expect(resolveValue("project.description", p)?.value).toBe("默认表达");
   });
 
   it("internship 同样生效", () => {
     const p = structuredClone(defaultProfile);
-    p.internships[0]!.descriptionLong = "默认实习表达";
+    p.internships[0]!.description = "默认实习表达";
     p.internships[0]!.variants.agent = "Agent 岗表达";
-    const v = resolveValue("internship.description", p, { maxLength: 1000, profileType: "agent" });
+    const v = resolveValue("internship.description", p, { profileType: "agent" });
     expect(v?.value).toBe("Agent 岗表达");
   });
 });

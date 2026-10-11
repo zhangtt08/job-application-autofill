@@ -112,17 +112,15 @@ describe("mapResumeJsonToProfile", () => {
     expect(edu.endDate).toBe("2027.06");
   });
 
-  it("internship：short=概述 / medium=职责列表 / long=分段全文", () => {
+  it("internship：描述 = 全部分段全文组装（无显式描述时）", () => {
     const mapped = mapResumeJsonToProfile(resumeJson);
     if (!mapped.ok) throw new Error("should map");
     const job = mapped.profile.internships[0]!;
     expect(job.company).toBe("示例科技有限公司");
-    expect(job.descriptionShort).toBe("推动人工流程自动化");
-    expect(job.descriptionMedium).toBe("职责一\n职责二");
-    expect(job.descriptionLong).toContain("【工作职责】");
-    expect(job.descriptionLong).toContain("【工作内容】");
-    expect(job.descriptionLong).toContain("【主要业绩】");
-    expect(job.descriptionLong).toContain("【概述】");
+    expect(job.description).toContain("【工作职责】");
+    expect(job.description).toContain("【工作内容】");
+    expect(job.description).toContain("【主要业绩】");
+    expect(job.description).toContain("【概述】");
   });
 
   it("语义槽位：职责/内容/业绩/总结/背景 各自独立落位，不再只拼进 description", () => {
@@ -150,8 +148,8 @@ describe("mapResumeJsonToProfile", () => {
     expect(p.role).toBe("业务方案设计、Agent工作流设计");
     expect(p.keywords).toContain("示例业务项目｜AI应用开发");
     expect(p.keywords).toContain("业务方案设计");
-    expect(p.descriptionLong).toContain("【项目背景】");
-    expect(p.descriptionLong).toContain("【核心功能】");
+    expect(p.description).toContain("【项目背景】");
+    expect(p.description).toContain("【核心功能】");
   });
 
   it("skills：简历分组归并入 technical/tools/certificates", () => {
@@ -181,12 +179,13 @@ describe("mapResumeJsonToProfile", () => {
     const mapped = mapResumeJsonToProfile(resumeJson);
     if (!mapped.ok) throw new Error("should map");
     const c = mapped.profile.content;
-    expect(c.selfIntroduction.long).toBe("2027届测试专业本科生");
-    expect(c.selfEvaluation.long).toContain("综合评价");
-    expect(c.selfEvaluation.long).toContain("AI评价");
-    expect(c.careerPlan.long).toContain("短期：进入AI应用岗位");
-    expect(c.careerPlan.long).toContain("长期：形成完整解决方案能力");
-    expect(c.personalAdvantages.medium).toBe("优势一；优势二");
+    expect(c.selfIntroduction).toBe("2027届测试专业本科生");
+    expect(c.selfEvaluation).toContain("综合评价");
+    expect(c.selfEvaluation).toContain("AI评价");
+    expect(c.careerPlan).toContain("短期：进入AI应用岗位");
+    expect(c.careerPlan).toContain("长期：形成完整解决方案能力");
+    expect(c.personalAdvantages).toContain("优势一");
+    expect(c.personalAdvantages).toContain("优势二");
   });
 
   it("sensitive 恒为空，绝不从外部 JSON 映射", () => {
@@ -222,9 +221,7 @@ describe("mapResumeJsonToProfile", () => {
     expect(cp.department).toBe("宣传部");
     expect(cp.position).toBe("干事");
     expect(cp.startDate).toBe("2023.09");
-    expect(cp.descriptionShort).toBe("积累校园宣传经验");
-    expect(cp.descriptionMedium).toBe("志愿活动摄影\n公众号内容制作");
-    expect(cp.descriptionLong).toContain("【工作职责】");
+    expect(cp.description).toContain("【工作职责】");
     expect(cp.responsibilities).toBe("志愿活动摄影\n公众号内容制作");
     expect(cp.summary).toBe("积累校园宣传经验");
   });
@@ -242,8 +239,8 @@ describe("mapResumeJsonToProfile", () => {
     expect(mapped.profile.basic.age).toBe("21");
     expect(mapped.profile.basic.portfolio).toBe("example.com");
     expect(mapped.profile.skills.awards).toContain("竞赛二等奖");
-    expect(mapped.profile.content.hobbies.short).toBe("摄影、短视频创作");
-    expect(mapped.profile.content.hobbies.long).toContain("· 摄影");
+    expect(mapped.profile.content.hobbies).toContain("摄影");
+    expect(mapped.profile.content.hobbies).toContain("短视频创作");
     expect(mapped.profile.jobPreferences.expectedIndustry).toBe("互联网");
   });
 
@@ -379,7 +376,7 @@ describe("中文键名简历母版", () => {
     expect(edu.endDate).toBe("2027.06");
   });
 
-  it("实习：语义槽位独立落位 + 描述三变体直取", () => {
+  it("实习：语义槽位独立落位 + 描述单段直取（旧三段块取最全一段）", () => {
     const mapped = mapResumeJsonToProfile(cnResume);
     if (!mapped.ok) throw new Error("should map");
     const job = mapped.profile.internships[0]!;
@@ -389,9 +386,7 @@ describe("中文键名简历母版", () => {
     expect(job.workContent).toBe("内容一");
     expect(job.achievements).toBe("业绩一");
     expect(job.summary).toBe("实习收获");
-    expect(job.descriptionShort).toBe("短");
-    expect(job.descriptionMedium).toBe("中");
-    expect(job.descriptionLong).toBe("长");
+    expect(job.description).toBe("长");
   });
 
   it("校园：组织/职务/语义槽位", () => {
@@ -434,15 +429,15 @@ describe("中文键名简历母版", () => {
     expect(mapped.profile.jobPreferences.employmentType).toBe("2027届校招全职");
   });
 
-  it("常用文本 {短,中,长} 直取", () => {
+  it("常用文本单段直取（旧 {短,中,长} 块取最全一段）", () => {
     const mapped = mapResumeJsonToProfile(cnResume);
     if (!mapped.ok) throw new Error("should map");
     const c = mapped.profile.content;
-    expect(c.selfIntroduction.short).toBe("介短");
-    expect(c.selfEvaluation.medium).toBe("评中");
-    expect(c.personalAdvantages.long).toBe("优长");
-    expect(c.careerPlan.short).toBe("规短");
-    expect(c.hobbies.long).toBe("趣长");
+    expect(c.selfIntroduction).toBe("介长");
+    expect(c.selfEvaluation).toBe("评长");
+    expect(c.personalAdvantages).toBe("优长");
+    expect(c.careerPlan).toBe("规长");
+    expect(c.hobbies).toBe("趣长");
   });
 });
 

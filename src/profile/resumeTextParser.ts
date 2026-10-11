@@ -5,7 +5,6 @@ import type {
   ExperienceVariants,
   InternshipEntry,
   JobPreferences,
-  LongTextBlock,
   Profile,
   ProjectEntry,
 } from "../types/profile";
@@ -561,21 +560,11 @@ function classifyGroup(group: Line[]): EntryDraft {
 }
 
 /* ------------------------------------------------------------------ *
- * 组装三种长度的描述
+ * 组装描述
  * ------------------------------------------------------------------ */
 
-function firstSentence(points: string[], limit: number): string {
-  const joined = points.join("；");
-  if (joined.length <= limit) return joined;
-  const cut = joined.slice(0, limit);
-  const at = Math.max(cut.lastIndexOf("；"), cut.lastIndexOf("。"), cut.lastIndexOf("，"));
-  return at > limit * 0.5 ? cut.slice(0, at) : cut;
-}
-
 interface ExperienceTail {
-  descriptionShort: string;
-  descriptionMedium: string;
-  descriptionLong: string;
+  description: string;
   responsibilities: string;
   workContent: string;
   achievements: string;
@@ -584,19 +573,13 @@ interface ExperienceTail {
 }
 
 function buildTail(draft: EntryDraft): ExperienceTail {
-  const longParts = [...draft.points];
-  if (draft.background) longParts.push(`【背景】${draft.background}`);
-  if (draft.courses) longParts.push(`【主修课程】${draft.courses}`);
-
-  const medium = draft.points.length > 0 ? draft.points.join("\n") : draft.summary;
-  const long = longParts.length > 0 ? longParts.join("\n") : medium;
-  const short =
-    draft.points.length === 0 && draft.summary ? draft.summary.slice(0, 120) : firstSentence(draft.points, 118);
+  const descParts = [...draft.points];
+  if (draft.background) descParts.push(`【背景】${draft.background}`);
+  if (draft.courses) descParts.push(`【主修课程】${draft.courses}`);
+  const description = descParts.length > 0 ? descParts.join("\n") : draft.summary;
 
   return {
-    descriptionShort: short,
-    descriptionMedium: medium,
-    descriptionLong: long || medium,
+    description,
     responsibilities: draft.responsibilities.join("\n"),
     workContent: draft.workContent.join("\n"),
     achievements: draft.achievements.join("\n"),
@@ -858,11 +841,9 @@ function parseJobPreferences(lines: Line[]): JobPreferences {
 }
 
 function parseContent(sections: Record<ContentKey, Line[]>): ContentProfile {
-  const build = (lines: Line[], sep: string): LongTextBlock => {
+  const build = (lines: Line[], sep: string): string => {
     const items = lines.map((l) => stripBullet(l.text)).filter(Boolean);
-    if (items.length === 0) return { short: "", medium: "", long: "" };
-    const text = items.join(sep);
-    return { short: text, medium: text, long: items.join("\n") };
+    return items.join(sep);
   };
   return {
     selfIntroduction: build(sections.selfIntroduction, " "),
@@ -964,7 +945,7 @@ export function parseResumeText(text: string): ResumeTextParseResult {
     skills.certificates.length +
     skills.awards.length;
   if (skillCount > 0) notes.push(`技能/证书 ${skillCount} 项`);
-  const contentFilled = CONTENT_KEYS.filter((k) => content[k].long).length;
+  const contentFilled = CONTENT_KEYS.filter((k) => content[k].trim()).length;
   if (contentFilled > 0) notes.push(`常用文本 ${contentFilled} 段`);
   if (jobPreferences.expectedPosition.length > 0) notes.push(`求职意向 ${jobPreferences.expectedPosition.length} 项`);
   if (basic.name) notes.push(`姓名「${basic.name}」`);

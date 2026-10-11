@@ -123,13 +123,11 @@ describe("Effective Profile", () => {
 
 describe("Content Resolver sourceType", () => {
   const p = structuredClone(defaultProfile);
-  p.projects[0]!.descriptionLong = "默认表达";
-  p.projects[0]!.descriptionMedium = "默认表达";
-  p.projects[0]!.descriptionShort = "默认表达";
+  p.projects[0]!.description = "默认表达";
 
   it("variant 存在 → sourceType=variant + sourcePath，无 fallback", () => {
     p.projects[0]!.variants.agent = "Agent 表达";
-    const v = resolveValue("project.description", p, { maxLength: 500, profileType: "agent" });
+    const v = resolveValue("project.description", p, { profileType: "agent" });
     expect(v?.sourceType).toBe("variant");
     expect(v?.sourcePath).toContain("variants.agent");
     expect(v?.fallbackUsed).toBe(false);
@@ -137,33 +135,22 @@ describe("Content Resolver sourceType", () => {
   });
 
   it("variant 缺失 → fallback default（方向非 general 时标记）", () => {
-    const v = resolveValue("project.description", p, { maxLength: 500, profileType: "aiProduct" });
+    const v = resolveValue("project.description", p, { profileType: "aiProduct" });
     expect(v?.sourceType).toBe("default");
     expect(v?.fallbackUsed).toBe(true);
     expect(v?.value).toBe("默认表达");
   });
 
-  it("页面上限很大但 long 为空时，回退到已有 medium 内容", () => {
-    const q = structuredClone(defaultProfile);
-    q.projects[0]!.descriptionLong = "";
-    q.projects[0]!.descriptionMedium = "项目中等长度描述";
-    const v = resolveValue("project.description", q, { maxLength: 2000, profileType: "general" });
-    expect(v?.value).toBe("项目中等长度描述");
-    expect(v?.variant).toBe("medium");
-  });
-
   it("general / 无方向 → default 且不算 fallback", () => {
-    const v = resolveValue("project.description", p, { maxLength: 500 });
+    const v = resolveValue("project.description", p);
     expect(v?.sourceType).toBe("default");
     expect(v?.fallbackUsed).toBe(false);
   });
 
   it("default 也没有 → undefined（pipeline 标注 empty）", () => {
     const q = structuredClone(defaultProfile);
-    q.projects[0]!.descriptionShort = "";
-    q.projects[0]!.descriptionMedium = "";
-    q.projects[0]!.descriptionLong = "";
-    expect(resolveValue("project.description", q, { maxLength: 500, profileType: "general" })).toBeUndefined();
+    q.projects[0]!.description = "";
+    expect(resolveValue("project.description", q, { profileType: "general" })).toBeUndefined();
   });
 
   it("fact 字段 → sourceType=fact", () => {

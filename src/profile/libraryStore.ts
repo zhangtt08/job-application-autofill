@@ -220,6 +220,16 @@ function strArr(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
 
+/** 常用文本块：单段 string 直取；旧版 {short,medium,long} → 取最全一段；其余补空串 */
+function legacyBlock(v: unknown): string {
+  if (typeof v === "string") return str(v);
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) {
+    const r = v as Record<string, unknown>;
+    return str(r.long) || str(r.medium) || str(r.short);
+  }
+  return "";
+}
+
 function strRecord(v: unknown, template: Record<string, string>): Record<string, string> {
   const src = rec(v);
   const out: Record<string, string> = {};
@@ -251,7 +261,7 @@ export function repairProfileShape(input: unknown): Profile {
     internships: repairEntries(src.internships, base.internships[0]! as unknown as Record<string, unknown>) as unknown as InternshipEntry[],
     campus: repairEntries(src.campus, {
       organization: "", department: "", position: "", startDate: "", endDate: "",
-      descriptionShort: "", descriptionMedium: "", descriptionLong: "",
+      description: "",
       responsibilities: "", workContent: "", achievements: "", summary: "",
       variants: { ...base.campus[0]?.variants ?? base.internships[0]!.variants },
     } as unknown as Record<string, unknown>) as unknown as CampusExperienceEntry[],
@@ -285,12 +295,13 @@ export function repairProfileShape(input: unknown): Profile {
           } as CareerPreferences,
         }
       : {}),
+    // 常用文本：新版为单段 string；旧版 {短,中,长} 块 → 取内容最全的一段迁移
     content: {
-      selfIntroduction: strRecord(rec(src.content).selfIntroduction, base.content.selfIntroduction as unknown as Record<string, string>) as unknown as ContentProfile["selfIntroduction"],
-      selfEvaluation: strRecord(rec(src.content).selfEvaluation, base.content.selfEvaluation as unknown as Record<string, string>) as unknown as ContentProfile["selfEvaluation"],
-      personalAdvantages: strRecord(rec(src.content).personalAdvantages, base.content.personalAdvantages as unknown as Record<string, string>) as unknown as ContentProfile["personalAdvantages"],
-      careerPlan: strRecord(rec(src.content).careerPlan, base.content.careerPlan as unknown as Record<string, string>) as unknown as ContentProfile["careerPlan"],
-      hobbies: strRecord(rec(src.content).hobbies, base.content.hobbies as unknown as Record<string, string>) as unknown as ContentProfile["hobbies"],
+      selfIntroduction: legacyBlock(rec(src.content).selfIntroduction),
+      selfEvaluation: legacyBlock(rec(src.content).selfEvaluation),
+      personalAdvantages: legacyBlock(rec(src.content).personalAdvantages),
+      careerPlan: legacyBlock(rec(src.content).careerPlan),
+      hobbies: legacyBlock(rec(src.content).hobbies),
     },
     sensitive: strRecord(src.sensitive, base.sensitive as unknown as Record<string, string>) as unknown as SensitiveProfile,
   };

@@ -15,8 +15,20 @@ async function main(){
  if(!base||!/^http:\/\/127\.0\.0\.1:\d+$/.test(base)||!token)throw Error('缺少有效的本机导入服务');
  const response=await fetch(`${base}/package?token=${encodeURIComponent(token)}`);if(!response.ok)throw Error('无法读取导入包');
  const pack=await response.json();
- for(const l of pack.libraries){const v=validateProfile(l.profile);if(!v.ok)throw Error(`${l.name}: ${v.errors.join(';')}`);l.profile=v.profile;}
+ if(pack.inspectOnly){
+   const snapshot=await chrome.storage.local.get(keys);
+   await send('snapshot',{extensionId:chrome.runtime.id,original:snapshot});
+   status.textContent='已读取当前资料库，尚未修改内容。';
+   result.textContent='接下来按当前字段结构补齐岗位描述。';
+   return;
+ }
+ for(const l of pack.libraries){const v=validateProfile(structuredClone(l.profile));if(!v.ok)throw Error(`${l.name}: ${v.errors.join(';')}`);if(!pack.descriptionOnly&&!pack.preserveProfileShape)l.profile=v.profile;}
  original=await chrome.storage.local.get(keys);
+ if(pack.expectedStoreSha256){
+   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(stable(original[keys[0]])));
+   const hash=Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');
+   if(hash!==pack.expectedStoreSha256)throw Error('读取后资料库发生变化，未覆盖；请重新读取当前资料');
+ }
  const oldName=original[keys[0]]?.shared?.basic?.name||original[keys[1]]?.basic?.name;
  if(oldName&&oldName!=='张天腾')throw Error('现有资料库姓名不同，未覆盖');
  await send('backup',{extensionId:chrome.runtime.id,original});
@@ -31,19 +43,21 @@ async function main(){
    else store={schemaVersion:2,shared:first.shared,libraries:[],activeLibraryId:''};
  }
  store=structuredClone(store);
+ if(!pack.preserveShared){
  store.shared.basic=mergeBlank(store.shared.basic,first.shared.basic);
  store.shared.sensitive=mergeBlank(store.shared.sensitive,first.shared.sensitive);
  const oldEdu=store.shared.education||[];
  store.shared.education=first.shared.education.map(e=>mergeBlank(oldEdu.find(x=>x.school===e.school&&x.major===e.major),e));
  for(const e of oldEdu)if(!store.shared.education.some(x=>x.school===e.school&&x.major===e.major))store.shared.education.push(e);
+ }
  const now=new Date().toISOString();
  for(const l of pack.libraries){
    const prior=store.libraries.find(x=>x.id===l.id);
-   const lib={id:l.id,name:l.name,directions:l.directions,note:l.note,content:split(l.profile).content,createdAt:prior?.createdAt||now,updatedAt:now};
+   const lib={...prior,id:l.id,name:l.name,directions:l.directions,note:l.note,content:split(l.profile).content,createdAt:prior?.createdAt||now,updatedAt:now};
    const ix=store.libraries.findIndex(x=>x.id===l.id);if(ix<0)store.libraries.push(lib);else store.libraries[ix]=lib;
  }
- store.activeLibraryId=pack.libraries[0].id;
- for(const l of store.libraries){const v=validateProfile({...store.shared,...l.content});if(!v.ok)throw Error(`合并后校验失败：${l.name}`);}
+ store.activeLibraryId=pack.activeLibraryId||pack.libraries[0].id;
+ for(const l of store.libraries){const v=validateProfile(structuredClone({...store.shared,...l.content}));if(!v.ok)throw Error(`合并后校验失败：${l.name}`);}
  const mirror={...store.shared,...store.libraries.find(x=>x.id===store.activeLibraryId).content};
  changed=true;
  await chrome.storage.local.set({[keys[0]]:store,[keys[1]]:mirror});

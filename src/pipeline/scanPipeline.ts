@@ -331,7 +331,6 @@ export function runScanPipeline(
       idValid && risk.risk !== "MANUAL_ONLY"
         ? resolveValue(match.fieldId, profile, {
             entryIndex,
-            maxLength: raw.context.maxLength,
             profileType: options.profileType,
             pack: options.pack,
           })

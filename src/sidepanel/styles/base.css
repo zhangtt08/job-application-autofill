@@ -666,14 +666,6 @@ input.field-value:focus { border-color: var(--accent); background: var(--panel);
   border-radius: 6px;
 }
 
-.variant-select {
-  font-size: 12px;
-  padding: 3px 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--panel);
-}
-
 .status-ready,
 .status-filled { color: var(--safe); }
 .status-confirm { color: var(--review); }

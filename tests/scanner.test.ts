@@ -122,7 +122,7 @@ describe("scanner（验收 1）", () => {
 describe("scanPipeline（验收 5 + 状态机）", () => {
   const profile: Profile = structuredClone(defaultProfile);
   profile.basic.name = "张三";
-  profile.content.selfEvaluation.medium = "踏实肯干";
+  profile.content.selfEvaluation = "踏实肯干";
 
   it("已匹配内容直接 ready；承诺类 → manual；radio/checkbox 不再是 unsupported", () => {
     inject(`

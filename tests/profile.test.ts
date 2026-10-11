@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultProfile } from "../src/profile/defaultProfile";
 import { validateProfile } from "../src/profile/schema";
-import { chooseVariant, resolveValue } from "../src/profile/profileResolver";
+import { resolveValue } from "../src/profile/profileResolver";
 import { maskValue } from "../src/utils/logger";
 import type { Profile } from "../src/types/profile";
 
@@ -47,10 +47,10 @@ describe("profile schema 校验", () => {
       skills: { technical: [], tools: [], languages: [], certificates: [] },
       jobPreferences: { expectedCity: [], expectedPosition: [], expectedSalary: "", availableDate: "", employmentType: "" },
       content: {
-        selfIntroduction: { short: "", medium: "", long: "" },
-        selfEvaluation: { short: "", medium: "", long: "" },
-        personalAdvantages: { short: "", medium: "", long: "" },
-        careerPlan: { short: "", medium: "", long: "" },
+        selfIntroduction: "",
+        selfEvaluation: "",
+        personalAdvantages: "",
+        careerPlan: "",
       },
       sensitive: { politicalStatus: "", maritalStatus: "", idNumber: "", emergencyContact: "" },
     };
@@ -62,8 +62,41 @@ describe("profile schema 校验", () => {
     expect(result.profile.basic.portfolio).toBe("");
     expect(result.profile.skills.awards).toEqual([]);
     expect(result.profile.jobPreferences.expectedIndustry).toBe("");
-    expect(result.profile.content.hobbies).toEqual({ short: "", medium: "", long: "" });
+    expect(result.profile.content.hobbies).toBe("");
     expect(result.profile.campus).toEqual([]);
+  });
+
+  it("向后兼容：旧版三段描述/常用文本块迁移为单段（取内容最全的一段）", () => {
+    const old = structuredClone(defaultProfile) as unknown as Record<string, unknown>;
+    old.internships = [
+      {
+        company: "某科技", department: "", position: "", startDate: "", endDate: "",
+        descriptionShort: "短", descriptionMedium: "中", descriptionLong: "长",
+        responsibilities: "", workContent: "", achievements: "", summary: "",
+        variants: { agent: "", aiApplication: "", aiProduct: "", aiOperation: "", aiSolution: "", aigcMarketing: "" },
+      },
+    ];
+    old.content = {
+      selfIntroduction: { short: "短介", medium: "", long: "长介" },
+      selfEvaluation: { short: "", medium: "中评", long: "" },
+      personalAdvantages: "",
+      careerPlan: "",
+      hobbies: "",
+    };
+    const result = validateProfile(old);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.profile.internships[0]!.description).toBe("长");
+    expect(result.profile.content.selfIntroduction).toBe("长介");
+    expect(result.profile.content.selfEvaluation).toBe("中评");
+  });
+
+  it("description 类型错误拒绝", () => {
+    const bad = structuredClone(defaultProfile) as unknown as Record<string, unknown>;
+    bad.internships = [{ ...(bad.internships as unknown as Record<string, unknown>[])[0], description: 42 }];
+    const result = validateProfile(bad);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.join(" ")).toContain("description");
   });
 });
 
@@ -75,11 +108,7 @@ describe("profileResolver", () => {
     { school: "A大", college: "CS", major: "软件", degree: "本科", educationLevel: "", startDate: "2019", endDate: "2023", gpa: "3.5", rank: "" },
     { school: "B大", college: "EE", major: "电子", degree: "硕士", educationLevel: "", startDate: "2023", endDate: "2026", gpa: "", rank: "" },
   ];
-  profile.content.personalAdvantages = {
-    short: "短优势",
-    medium: "中优势".repeat(50),
-    long: "长优势".repeat(200),
-  };
+  profile.content.personalAdvantages = "个人优势描述";
   profile.skills.technical = ["Java", "Python"];
   profile.internships = [
     {
@@ -88,9 +117,7 @@ describe("profileResolver", () => {
       position: "AI 应用实习",
       startDate: "2026.06",
       endDate: "2026.09",
-      descriptionShort: "短",
-      descriptionMedium: "中",
-      descriptionLong: "长",
+      description: "实习描述",
       responsibilities: "职责",
       workContent: "内容",
       achievements: "业绩",
@@ -123,20 +150,10 @@ describe("profileResolver", () => {
     expect(resolveValue("unknown", p)).toBeUndefined();
   });
 
-  it("maxlength 决定开放文本变体", () => {
-    expect(resolveValue("content.personalAdvantages", profile, { maxLength: 80 })?.variant).toBe("short");
-    expect(resolveValue("content.personalAdvantages", profile, { maxLength: 300 })?.variant).toBe("medium");
-    expect(resolveValue("content.personalAdvantages", profile, { maxLength: 1000 })?.variant).toBe("long");
-    expect(resolveValue("content.personalAdvantages", profile)?.variant).toBe("medium");
-  });
-
-  it("chooseVariant 边界", () => {
-    expect(chooseVariant(null)).toBe("medium");
-    expect(chooseVariant(undefined)).toBe("medium");
-    expect(chooseVariant(120)).toBe("short");
-    expect(chooseVariant(121)).toBe("medium");
-    expect(chooseVariant(350)).toBe("medium");
-    expect(chooseVariant(351)).toBe("long");
+  it("content 开放文本直接取单段描述", () => {
+    expect(resolveValue("content.personalAdvantages", profile)?.value).toBe("个人优势描述");
+    expect(resolveValue("content.personalAdvantages", profile)?.variant).toBe("plain");
+    expect(resolveValue("content.careerPlan", profile)).toBeUndefined(); // 空内容不填
   });
 
   it("数组字段 join 输出", () => {
@@ -148,7 +165,7 @@ describe("profileResolver", () => {
     expect(resolveValue("internship.department", profile)?.entryCount).toBe(1);
   });
 
-  it("campus.description 按变体取值；campus 客观字段走通用路径", () => {
+  it("campus.description 直接取单段描述；campus 客观字段走通用路径", () => {
     profile.campus = [
       {
         organization: "青年志愿者协会",
@@ -156,9 +173,7 @@ describe("profileResolver", () => {
         position: "干事",
         startDate: "2023.09",
         endDate: "2024.06",
-        descriptionShort: "短描述",
-        descriptionMedium: "中描述",
-        descriptionLong: "长描述",
+        description: "校园经历描述",
         responsibilities: "",
         workContent: "",
         achievements: "",
@@ -167,8 +182,8 @@ describe("profileResolver", () => {
       },
     ];
     expect(resolveValue("campus.organization", profile)?.value).toBe("青年志愿者协会");
-    expect(resolveValue("campus.description", profile, { maxLength: 80 })?.value).toBe("短描述");
-    expect(resolveValue("campus.description", profile, { maxLength: 1000 })?.value).toBe("长描述");
+    expect(resolveValue("campus.description", profile)?.value).toBe("校园经历描述");
+    expect(resolveValue("campus.description", profile)?.sourceType).toBe("default");
   });
 
   it("internship 语义槽位走通用取值路径", () => {

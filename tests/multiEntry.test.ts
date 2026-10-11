@@ -79,7 +79,7 @@ describe("多条目 entryIndex 轮转分配（修复重复块错位）", () => {
     const p = structuredClone(defaultProfile);
     const mk = (company: string, position: string): InternshipEntry => ({
       company, department: "", position, startDate: "", endDate: "",
-      descriptionShort: "", descriptionMedium: "", descriptionLong: "",
+      description: "",
       responsibilities: "", workContent: "", achievements: "", summary: "",
       variants: { agent: "", aiApplication: "", aiProduct: "", aiOperation: "", aiSolution: "", aigcMarketing: "" },
     });
@@ -165,7 +165,7 @@ describe("完整中文简历 fixture 导入（逐条逐槽位回归）", () => {
     expect(list[0]?.workContent).toContain("内容A1");
     expect(list[0]?.achievements).toContain("业绩A1");
     expect(list[0]?.summary).toBe("实习A收获");
-    expect(list[0]?.descriptionShort).toBe("A短描述");
+    expect(list[0]?.description).toBe("A长描述"); // 旧 {短,中,长} 描述块迁移取最全一段
     expect(list[1]?.company).toBe("示例互动有限公司");
     expect(list[1]?.position).toBe("短视频剪辑与运营");
     expect(list[1]?.responsibilities).toContain("职责B1");
@@ -198,7 +198,7 @@ describe("完整中文简历 fixture 导入（逐条逐槽位回归）", () => {
     expect(list[0]?.workContent).toContain("项目A内容1");
     expect(list[0]?.achievements).toContain("项目A成果1");
     expect(list[0]?.summary).toBe("项目A概述");
-    expect(list[0]?.descriptionLong).toBe("PA长");
+    expect(list[0]?.description).toBe("PA长");
     expect(list[1]?.name).toBe("示例 AI 作品集网站");
     expect(list[1]?.background).toBe("项目B背景");
     expect(list[1]?.summary).toBe("项目B概述");
@@ -207,11 +207,11 @@ describe("完整中文简历 fixture 导入（逐条逐槽位回归）", () => {
   it("常用文本五块全部落位", () => {
     if (!mapped.ok) throw new Error("should map");
     const c = mapped.profile.content;
-    expect(c.selfIntroduction.long).toBe("介长");
-    expect(c.selfEvaluation.medium).toBe("评中");
-    expect(c.personalAdvantages.short).toBe("优短");
-    expect(c.careerPlan.long).toBe("规长");
-    expect(c.hobbies.short).toBe("趣短");
+    expect(c.selfIntroduction).toBe("介长");
+    expect(c.selfEvaluation).toBe("评长");
+    expect(c.personalAdvantages).toBe("优长");
+    expect(c.careerPlan).toBe("规长");
+    expect(c.hobbies).toBe("趣长");
   });
 
   it("技能与求职期望落位", () => {

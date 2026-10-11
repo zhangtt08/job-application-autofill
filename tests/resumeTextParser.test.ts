@@ -66,8 +66,7 @@ describe("parseResumeText", () => {
     expect(intern.department).toBe("产品部");
     expect(intern.position).toBe("产品实习生");
     expect(intern.responsibilities.split("\n")).toHaveLength(2);
-    expect(intern.descriptionShort.length).toBeGreaterThan(0);
-    expect(intern.descriptionMedium).toContain("需求调研");
+    expect(intern.description).toContain("需求调研");
 
     expect(profile.projects).toHaveLength(1);
     const proj = profile.projects[0]!;
@@ -94,9 +93,7 @@ describe("parseResumeText", () => {
 
   it("常用文本与求职意向", () => {
     const { profile } = ok(parseResumeText(SAMPLE));
-    expect(profile.content.selfEvaluation.long).toContain("做事细致");
-    // 三档都写同一份文本，页面上无论 maxlength 多少都能取到
-    expect(profile.content.selfEvaluation.short).toBe(profile.content.selfEvaluation.long);
+    expect(profile.content.selfEvaluation).toContain("做事细致");
     expect(profile.jobPreferences.expectedPosition).toEqual(["AI产品经理", "AI运营"]);
   });
 
@@ -174,7 +171,7 @@ XX集团 数据分析师 2022年3月-2024年6月
 
   it("分节标题不会被当成条目内容", () => {
     const { profile } = ok(parseResumeText(SAMPLE));
-    expect(profile.internships[0]!.descriptionLong).not.toContain("实习经历");
+    expect(profile.internships[0]!.description).not.toContain("实习经历");
     expect(profile.education[0]!.school).not.toContain("教育背景");
   });
 });

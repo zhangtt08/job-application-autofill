@@ -45,8 +45,8 @@ function profileWithContent(): Profile {
   };
   p.internships[0] = {
     company: "示例科技有限公司", department: "测试部门", position: "AI 应用实习生",
-    startDate: "2026.06", endDate: "2026.09", descriptionShort: "", descriptionMedium: "",
-    descriptionLong: "", responsibilities: "", workContent: "", achievements: "", summary: "",
+    startDate: "2026.06", endDate: "2026.09", description: "",
+    responsibilities: "", workContent: "", achievements: "", summary: "",
     variants: { agent: "", aiApplication: "", aiProduct: "", aiOperation: "", aiSolution: "", aigcMarketing: "" },
   };
   p.jobPreferences.expectedPosition = ["AI 应用实习生"];

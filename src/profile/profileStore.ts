@@ -265,7 +265,7 @@ export function mergeBlankProfile(current: Profile, incoming: Profile): Profile 
   }
 
   for (const key of ["selfIntroduction", "selfEvaluation", "personalAdvantages", "careerPlan", "hobbies"] as const) {
-    if (!out.content[key].long) out.content[key] = incoming.content[key];
+    if (!out.content[key].trim()) out.content[key] = incoming.content[key];
   }
 
   if (out.careerPreferences && incoming.careerPreferences && out.careerPreferences.targetDirections.length === 0) {
@@ -291,7 +291,7 @@ export function profileHasContent(p: Profile): boolean {
   if (p.projects.some((e) => e.name.trim())) return true;
   if (p.campus.some((e) => e.organization.trim() || e.position.trim())) return true;
   if (p.skills.technical.length || p.skills.tools.length || p.skills.certificates.length) return true;
-  if (Object.values(p.content).some((c) => c.short.trim() || c.medium.trim() || c.long.trim())) return true;
+  if (Object.values(p.content).some((c) => c.trim())) return true;
   return false;
 }
 

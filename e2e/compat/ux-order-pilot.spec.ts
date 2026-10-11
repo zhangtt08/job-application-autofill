@@ -25,8 +25,7 @@ async function seedSecondProject(): Promise<void> {
   profile.projects.push({
     ...profile.projects[0],
     name: "Multi-Agent 项目",
-    descriptionShort: "E2E标记-PROJECT-B 短描述",
-    descriptionMedium: "E2E标记-PROJECT-B 的 medium 描述",
+    description: "E2E标记-PROJECT-B 的 medium 描述",
   });
   await seedProfileDeep(sidePanel, profile);
   await sidePanel.reload();
@@ -50,7 +49,7 @@ test("UX11: Multi-entry → 两个项目条目按资料顺序分别填入，不�
   // #1 = projects-0（A，默认描述），#2 = projects-1（B，E2E标记）——顺序映射且内容各异
   const v1 = await page.locator("#me-p1").inputValue();
   const v2 = await page.locator("#me-p2").inputValue();
-  expect(v1).toBe("项目中描述（默认）");
+  expect(v1).toContain("项目中描述（默认）");
   expect(v2).toContain("E2E标记-PROJECT-B");
   expect(v1).not.toBe(v2);
 });

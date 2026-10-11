@@ -98,13 +98,11 @@ function makeProfile(patch: Partial<Profile> = {}): Profile {
         ...base.internships[0]!,
         company: "某某科技",
         position: "产品实习生",
-        descriptionShort: "负责需求调研",
-        descriptionMedium: "负责需求调研与竞品分析",
-        descriptionLong: "负责需求调研与竞品分析，输出 PRD",
+        description: "负责需求调研与竞品分析，输出 PRD",
       },
     ],
     skills: { ...base.skills, technical: ["Python"], tools: ["Figma"] },
-    content: { ...base.content, selfEvaluation: { short: "细致", medium: "细致", long: "做事细致" } },
+    content: { ...base.content, selfEvaluation: "做事细致" },
     sensitive: { ...base.sensitive, idNumber: "330106200305011234" },
     ...patch,
   };
@@ -297,7 +295,7 @@ describe("repairProfileShape", () => {
     expect(repaired.basic.phone).toBe("");
     expect(repaired.skills.technical).toEqual(["Go"]);
     expect(repaired.skills.tools).toEqual([]);
-    expect(repaired.content.selfEvaluation).toEqual({ short: "", medium: "", long: "" });
+    expect(repaired.content.selfEvaluation).toBe("");
     expect(repaired.education).toEqual([]);
     expect(validateProfile(repaired).ok).toBe(true);
   });

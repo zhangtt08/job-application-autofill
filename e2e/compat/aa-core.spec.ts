@@ -75,8 +75,7 @@ test("AA4: Multi-entry → 两个项目字段分别填写不串位", async () =>
   profile.projects.push({
     ...profile.projects[0],
     name: "Multi-Agent 项目",
-    descriptionShort: "第二个项目描述",
-    descriptionMedium: "Multi-Agent 项目的 medium 描述",
+    description: "第二个项目描述",
   });
   await seedProfileDeep(sidePanel, profile);
   await sidePanel.reload();

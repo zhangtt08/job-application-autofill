@@ -214,9 +214,7 @@ function mapCampus(v: unknown): CampusExperienceEntry[] {
       position: s(e, ["职务", "position", "role"]),
       startDate: s(e, ["开始时间", "开始", "start_date", "startDate"]),
       endDate: s(e, ["结束时间", "结束", "end_date", "endDate"]),
-      descriptionShort: str(e.descriptionShort) || desc.short || summary || resp[0] || achievements[0] || "",
-      descriptionMedium: str(e.descriptionMedium) || desc.medium || (resp.length > 0 ? resp.join("\n") : summary),
-      descriptionLong: str(e.descriptionLong) || desc.long || composeSections(e, CAMPUS_SKIP),
+      description: desc || composeSections(e, CAMPUS_SKIP),
       // 语义槽位：表单问什么填什么（工作职责/工作内容/业绩/总结各自独立）
       responsibilities: resp.join("\n"),
       workContent: workContent.join("\n"),
@@ -242,9 +240,7 @@ function mapInternships(v: unknown): InternshipEntry[] {
       position: s(e, ["职务", "岗位", "position", "role"]),
       startDate: s(e, ["开始时间", "开始", "start_date", "startDate"]),
       endDate: s(e, ["结束时间", "结束", "end_date", "endDate"]),
-      descriptionShort: str(e.descriptionShort) || desc.short || summary || resp[0] || achievements[0] || "",
-      descriptionMedium: str(e.descriptionMedium) || desc.medium || (resp.length > 0 ? resp.join("\n") : summary),
-      descriptionLong: str(e.descriptionLong) || desc.long || composeSections(e, INTERNSHIP_SKIP),
+      description: desc || composeSections(e, INTERNSHIP_SKIP),
       // 语义槽位：表单问什么填什么（工作职责/工作内容/业绩/总结各自独立）
       responsibilities: resp.join("\n"),
       workContent: workContent.join("\n"),
@@ -259,7 +255,7 @@ function mapInternships(v: unknown): InternshipEntry[] {
 const PROJECT_SKIP = new Set([
   "name", "type", "role",
   "start_date", "startDate", "end_date", "endDate",
-  "descriptionShort", "descriptionMedium", "descriptionLong",
+  "描述", "description", "descriptionShort", "descriptionMedium", "descriptionLong",
 ]);
 
 function mapProjects(v: unknown): ProjectEntry[] {
@@ -272,17 +268,12 @@ function mapProjects(v: unknown): ProjectEntry[] {
     const background = s(e, ["项目背景", "background", "background_intro"]);
     const summary = str(e["项目概述/总结"] ?? e.summary);
     const desc = pickDesc(e);
-    const prevShort = str(e.descriptionShort);
-    const prevMedium = str(e.descriptionMedium);
-    const prevLong = str(e.descriptionLong);
     return {
       name: s(e, ["项目名称", "name"]),
       role: roleArr.join("、"),
       startDate: s(e, ["开始时间", "开始", "start_date", "startDate"]),
       endDate: s(e, ["结束时间", "结束", "end_date", "endDate"]),
-      descriptionShort: prevShort || desc.short || summary || features[0] || resp[0] || "",
-      descriptionMedium: prevMedium || desc.medium || (features.length > 0 ? features.join("\n") : summary || resp.join("\n")),
-      descriptionLong: prevLong || desc.long || composeSections(e, PROJECT_SKIP),
+      description: desc || composeSections(e, PROJECT_SKIP),
       keywords: dedupe([...asList(e["关键词"]), str(e.type), ...roleArr]),
       // 语义槽位：项目背景/职责/内容/成果/总结各自独立
       background,
@@ -412,85 +403,62 @@ function mapJobPreferences(root: Rec, bi: Rec): JobPreferences {
 }
 
 /**
- * 中文母版常用文本块 {短,中,长} 直接映射；
- * 返回 null 表示不是该结构（英文版各槽位走各自的旧派生逻辑）。
+ * 中文母版常用文本块：新版单段 string；旧版 {短,中,长} → 取内容最全的一段迁移。
+ * 英文版各槽位走各自的旧派生逻辑（现在同样归并为一段）。
  */
-function directBlock(v: unknown): LongTextBlock | null {
+function directBlock(v: unknown): string | null {
+  if (typeof v === "string") return str(v) || null;
   if (!isRec(v)) return null;
-  const short = str(v["短"] ?? v.short);
-  const medium = str(v["中"] ?? v.medium);
-  const long = str(v["长"] ?? v.long);
-  if (!short && !medium && !long) return null;
-  return { short, medium, long };
+  const text = str(v["长"] ?? v.long) || str(v["中"] ?? v.medium) || str(v["短"] ?? v.short);
+  return text || null;
 }
 
 function mapContent(root: Rec): ContentProfile {
-  // 自我介绍：中文 {短,中,长}；英文 personal_summary 字符串三档同文
-  const introBlock = directBlock(firstVal(root, ["自我介绍", "self_introduction"]));
-  const personalSummary = str(root.personal_summary);
-  const selfIntroduction: LongTextBlock = introBlock ?? {
-    short: personalSummary,
-    medium: personalSummary,
-    long: personalSummary,
-  };
+  // 自我介绍：中文单段/{短,中,长}；英文 personal_summary 字符串
+  const selfIntroduction =
+    directBlock(firstVal(root, ["自我介绍", "self_introduction"])) ?? str(root.personal_summary);
 
-  // 自我评价：中文 {短,中,长}；英文 self_evaluation {general, ai_application, ai_operations}
+  // 自我评价：中文单段/{短,中,长}；英文 self_evaluation {general, ai_application, ai_operations}
   const evalRaw = firstVal(root, ["自我评价", "self_evaluation"]);
   const evalBlock = directBlock(evalRaw);
-  let selfEvaluation: LongTextBlock;
-  if (evalBlock) {
+  let selfEvaluation: string;
+  if (evalBlock != null) {
     selfEvaluation = evalBlock;
   } else {
     const seRec = isRec(evalRaw) ? evalRaw : {};
     const seGeneral = typeof evalRaw === "string" ? evalRaw.trim() : str(seRec.general);
     const seAi = str(seRec.ai_application);
     const seOps = str(seRec.ai_operations);
-    selfEvaluation = {
-      short: seGeneral,
-      medium: seGeneral,
-      long: [seGeneral, seAi, seOps].filter(Boolean).join("\n\n"),
-    };
+    selfEvaluation = [seGeneral, seAi, seOps].filter(Boolean).join("\n\n");
   }
 
-  // 个人优势：中文 {短,中,长}；英文 personal_strengths 数组
+  // 个人优势：中文单段/{短,中,长}；英文 personal_strengths 数组
   const advRaw = firstVal(root, ["个人优势", "personal_strengths"]);
   const strengths = asList(advRaw);
-  const personalAdvantages: LongTextBlock = directBlock(advRaw) ?? {
-    short: strengths[0] ?? "",
-    medium: strengths.join("；"),
-    long: strengths.map((st) => `· ${st}`).join("\n"),
-  };
+  const personalAdvantages = directBlock(advRaw) ?? strengths.map((st) => `· ${st}`).join("\n");
 
-  // 职业规划：中文 {短,中,长}；英文 career_plan {short_term, long_term}
+  // 职业规划：中文单段/{短,中,长}；英文 career_plan {short_term, long_term}
   const planRaw = firstVal(root, ["职业规划", "career_plan"]);
   const planBlock = directBlock(planRaw);
-  let careerPlan: LongTextBlock;
-  if (planBlock) {
+  let careerPlan: string;
+  if (planBlock != null) {
     careerPlan = planBlock;
   } else {
     const cp = isRec(planRaw) ? planRaw : {};
     const shortTerm = str(cp.short_term);
     const longTerm = str(cp.long_term);
-    careerPlan = {
-      short: shortTerm,
-      medium: shortTerm,
-      long: [
-        shortTerm ? `短期：${shortTerm}` : "",
-        longTerm ? `长期：${longTerm}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
-    };
+    careerPlan = [
+      shortTerm ? `短期：${shortTerm}` : "",
+      longTerm ? `长期：${longTerm}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   }
 
-  // 兴趣爱好：中文 {短,中,长}；英文 hobbies 数组
+  // 兴趣爱好：中文单段/{短,中,长}；英文 hobbies 数组
   const hobRaw = firstVal(root, ["兴趣爱好", "hobbies"]);
   const hobbies = asList(hobRaw);
-  const hobbyBlock: LongTextBlock = directBlock(hobRaw) ?? {
-    short: hobbies.join("、"),
-    medium: hobbies.join("、"),
-    long: hobbies.map((h) => `· ${h}`).join("\n"),
-  };
+  const hobbyBlock = directBlock(hobRaw) ?? hobbies.map((h) => `· ${h}`).join("\n");
 
   return { selfIntroduction, selfEvaluation, personalAdvantages, careerPlan, hobbies: hobbyBlock };
 }

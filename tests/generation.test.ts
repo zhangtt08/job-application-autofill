@@ -14,9 +14,7 @@ const PROJECT = defaultProfile.projects[0]!;
 const enrichedProject = {
   ...PROJECT,
   name: "示例流程自动化系统",
-  descriptionShort: "项目短描述",
-  descriptionMedium: "项目中描述",
-  descriptionLong: "项目长描述",
+  description: "项目短描述。项目长描述。",
   achievements: "日处理量 5000-6000 条，峰值处理量超过 10000 条，准确率稳定 90%+。",
   responsibilities: "1. 完成需求梳理、流程拆解、开发、测试和迭代。2. 负责自动化工具的持续优化。",
   workContent: "使用 Playwright 与 Python 搭建自动化流程。",
@@ -126,9 +124,7 @@ describe("Structured Response 解析", () => {
     empty.projects[0]!.achievements = "";
     empty.projects[0]!.responsibilities = "";
     empty.projects[0]!.workContent = "";
-    empty.projects[0]!.descriptionShort = "";
-    empty.projects[0]!.descriptionMedium = "";
-    empty.projects[0]!.descriptionLong = "";
+    empty.projects[0]!.description = "";
     empty.projects[0]!.keywords = [];
     await expect(
       generateVariant({

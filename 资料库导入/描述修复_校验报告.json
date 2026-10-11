@@ -1,0 +1,43 @@
+{
+  "libraries": [
+    {
+      "name": "默认资料库",
+      "projects": 10,
+      "internships": 3,
+      "campus": 1,
+      "nonemptyDescriptions": 14,
+      "textFields": 5
+    },
+    {
+      "name": "AI 应用｜业务自动化｜解决方案",
+      "projects": 5,
+      "internships": 3,
+      "campus": 1,
+      "nonemptyDescriptions": 9,
+      "textFields": 5
+    },
+    {
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "projects": 4,
+      "internships": 3,
+      "campus": 1,
+      "nonemptyDescriptions": 8,
+      "textFields": 5
+    },
+    {
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "projects": 4,
+      "internships": 3,
+      "campus": 1,
+      "nonemptyDescriptions": 8,
+      "textFields": 5
+    }
+  ],
+  "sharedAndMetadataPreserved": true,
+  "numberedFullDescriptions": true,
+  "newSchemaValidated": true,
+  "resolverValidated": true,
+  "storageReadback": true,
+  "verifiedAt": "2026-10-06T16:02:10.282Z",
+  "originalBackupFile": "导入前原资料库_2026-10-06T16-02-04-133Z.json"
+}

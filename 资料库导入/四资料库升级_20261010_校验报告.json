@@ -1,0 +1,139 @@
+{
+  "ok": true,
+  "storageReadback": true,
+  "sharedPreserved": true,
+  "activeLibraryPreserved": true,
+  "allDescriptionsNumbered": true,
+  "semanticFieldsVerified": true,
+  "libraries": [
+    {
+      "name": "默认资料库",
+      "projects": 10,
+      "internships": 3,
+      "campus": 1,
+      "professionalSkillsCharacters": 958,
+      "projectDescriptionCharacters": [
+        {
+          "name": "广告素材处理 Agent 与全链路业务自动化系统",
+          "chars": 1427
+        },
+        {
+          "name": "Tcode｜个人 Agent 与本机工具编排平台",
+          "chars": 1045
+        },
+        {
+          "name": "Agent 创作工具链｜素材准备 · 视频 · 海报 · 音频",
+          "chars": 1123
+        },
+        {
+          "name": "ACB｜跨机器项目与 Agent 上下文交接系统",
+          "chars": 461
+        },
+        {
+          "name": "Application Form Assistant｜网申资料库与自动填写助手",
+          "chars": 570
+        },
+        {
+          "name": "TrendScope｜热点决策与内容增长实践",
+          "chars": 692
+        },
+        {
+          "name": "个人品牌网站与 SEO / GEO 运营实践",
+          "chars": 967
+        },
+        {
+          "name": "AIGC 视频与音画内容创作",
+          "chars": 821
+        },
+        {
+          "name": "AIGC 系列海报与品牌视觉表达",
+          "chars": 539
+        },
+        {
+          "name": "品牌策略与整合营销方案实践",
+          "chars": 623
+        }
+      ]
+    },
+    {
+      "name": "AI 应用｜业务自动化｜解决方案",
+      "projects": 4,
+      "internships": 3,
+      "campus": 1,
+      "professionalSkillsCharacters": 649,
+      "projectDescriptionCharacters": [
+        {
+          "name": "广告素材处理 Agent 与全链路业务自动化系统",
+          "chars": 1427
+        },
+        {
+          "name": "Tcode｜个人 Agent 与本机工具编排平台",
+          "chars": 1045
+        },
+        {
+          "name": "Agent 创作套件｜AgentCut · AgentCanvas · AgentVideo",
+          "chars": 795
+        },
+        {
+          "name": "ACB｜跨机器项目与 Agent 上下文交接系统",
+          "chars": 461
+        }
+      ]
+    },
+    {
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "projects": 4,
+      "internships": 3,
+      "campus": 1,
+      "professionalSkillsCharacters": 547,
+      "projectDescriptionCharacters": [
+        {
+          "name": "AIGC 视频与音画内容创作",
+          "chars": 821
+        },
+        {
+          "name": "AIGC 系列海报与品牌视觉表达",
+          "chars": 539
+        },
+        {
+          "name": "Agent 创作工具链｜素材准备 · 视频 · 海报 · 音频",
+          "chars": 1123
+        },
+        {
+          "name": "品牌策略与整合营销方案实践",
+          "chars": 543
+        }
+      ]
+    },
+    {
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "projects": 5,
+      "internships": 3,
+      "campus": 1,
+      "professionalSkillsCharacters": 702,
+      "projectDescriptionCharacters": [
+        {
+          "name": "企业素材业务数字化与 Agent 自动化落地",
+          "chars": 1512
+        },
+        {
+          "name": "Tcode｜AI 任务助手与产品体验优化",
+          "chars": 952
+        },
+        {
+          "name": "TrendScope｜热点决策与内容增长实践",
+          "chars": 692
+        },
+        {
+          "name": "个人品牌网站与 SEO / GEO 运营实践",
+          "chars": 967
+        },
+        {
+          "name": "品牌策略与整合营销方案实践",
+          "chars": 557
+        }
+      ]
+    }
+  ],
+  "backup": "导入前原资料库_2026-10-10T15-02-40-503Z.json"
+}
