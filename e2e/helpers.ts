@@ -3,7 +3,7 @@ import os from "node:os";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { chromium, type BrowserContext, type Page } from "@playwright/test";
-import type { Profile } from "../../src/types/profile";
+import type { Profile } from "../src/types/profile";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -204,9 +204,7 @@ export const PROFILE_FIXTURE: Profile = {
 
 /** 预置 Profile（测试数据准备，不 mock 扩展运行环境） */
 export async function setupProfile(sidePanel: Page): Promise<void> {
-  await sidePanel.evaluate((profile) => {
-    return chrome.storage.local.set({ "afa.profile.v1": profile });
-  }, PROFILE_FIXTURE);
+  await seedProfileDeep(sidePanel, PROFILE_FIXTURE);
 }
 
 /**
@@ -248,7 +246,7 @@ export async function seedProfileDeep(sidePanel: Page, profile: typeof PROFILE_F
 /** 清空岗位/trace（保留 profile 由 setupProfile 重设） */
 export async function resetJobStorage(sidePanel: Page): Promise<void> {
   await sidePanel.evaluate(() => {
-    return chrome.storage.local.remove(["afa.jobs.v1", "afa.trace.v1"]);
+    return chrome.storage.local.remove(["afa.jobs.v1", "afa.jobs.v2", "afa.sessions.v1", "afa.sessions.v2", "afa.events.v1", "afa.trace.v1"]);
   });
 }
 
@@ -261,10 +259,7 @@ export async function readStorage(page: Page, key: string): Promise<unknown> {
  * 点击「查看填写预览」展开逐字段 Review；没有可填字段时 CTA 不出现，静默跳过。
  */
 export async function revealPreview(sidePanel: Page): Promise<void> {
-  await sidePanel
-    .getByRole("button", { name: "查看填写预览" })
-    .click({ timeout: 8000 })
-    .catch(() => {});
+  for (const button of await sidePanel.locator('.fold-head[aria-expanded="false"]').all()) await button.click();
 }
 
 /**
@@ -287,12 +282,14 @@ export async function setAutoFill(sidePanel: Page, autoFill: boolean): Promise<v
  * 自动填写模式下识别动作本身就完成了写入；只有仍停留在待填写状态时才走确认对话框。
  */
 export async function ensureFilled(sidePanel: Page, timeout = 60_000): Promise<void> {
-  const fillBtn = sidePanel.getByRole("button", { name: /填写确认的|确认并填写/ }).first();
-  const banner = sidePanel.getByText(/填写完成 ——/);
-  const enabled = await fillBtn.isEnabled().catch(() => false);
-  if (enabled) {
-    await fillBtn.click({ timeout: 8000 }).catch(() => {});
-    await sidePanel.locator(".dialog .primary", { hasText: "确认填写" }).click({ timeout: 8000 }).catch(() => {});
-  }
-  await banner.waitFor({ timeout });
+  const heading = sidePanel.locator(".fill-overview h2");
+  await heading.filter({ hasText: /填写完成|部分已填写/ }).waitFor({ timeout });
+}
+
+/** Scan stays read-only; only choosing a library authorizes filling. */
+export async function chooseLibraryAndFill(sidePanel: Page): Promise<void> {
+  await sidePanel.getByRole("heading", { name: "选择资料库" }).waitFor();
+  await sidePanel.locator(".library-option").first().click();
+  await sidePanel.locator(".fill-overview h2").filter({ hasText: /填写完成|部分已填写/ }).waitFor({ timeout: 60_000 });
+  await sidePanel.getByRole("button", { name: "重新识别", exact: true }).waitFor();
 }

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { FIXTURE_BASE, setupProfile, resetJobStorage, launchWithExtension, openSidePanel, revealPreview, ensureFilled } from "./helpers";
+import { chooseLibraryAndFill, FIXTURE_BASE, setupProfile, resetJobStorage, launchWithExtension, openSidePanel, revealPreview, ensureFilled } from "./helpers";
 
 /**
  * issue-004 浏览器层回归：Application Context Gate。
@@ -31,6 +31,7 @@ async function openAndScan(): Promise<Page> {
   await page.goto(`${FIXTURE_BASE}/compatibility/application-context.html`);
   await page.bringToFront();
   await sidePanel.getByRole("button", { name: /开始识别|重新识别/ }).click();
+  await chooseLibraryAndFill(sidePanel);
   await revealPreview(sidePanel);
   await sidePanel.locator(".field-card").first().waitFor({ timeout: 15000 });
   return page;
@@ -45,7 +46,7 @@ test("CTX-A: 登录面板与导航搜索框不进候选、不进计划、写完�
   const page = await openAndScan();
 
   // 卡片层面：认证/导航控件不出现在可填清单里，只以一行统计存在（§十八/§二十）
-  await expect(sidePanel.locator(".fold-note")).toContainText("已忽略");
+  await expect(sidePanel.locator(".fold-note")).toHaveCount(0);
   const cardTexts = await sidePanel.locator(".field-card .field-label").allTextContents();
   expect(cardTexts.some((t) => t.includes("职位关键字"))).toBe(false); // 导航搜索框未成为候选
   expect(cardTexts.some((t) => t.includes("请输入手机号"))).toBe(false); // 登录手机号未成为候选
@@ -80,7 +81,7 @@ test("CTX-C: 同页并存时，搜索框被忽略而申请区手机号照写（�
   expect(appPhone.length).toBeGreaterThan(0);
 
   // 撤销只应还原申请区，认证区本来就没被碰过
-  await sidePanel.getByRole("button", { name: "撤销本次填写" }).click();
+  await sidePanel.getByRole("button", { name: "撤销填写" }).click();
   await sidePanel.getByText(/已撤销本次填写/).waitFor({ timeout: 10000 });
   await expect(page.locator("#app-phone")).toHaveValue("");
   await expect(page.locator("#login-phone")).toHaveValue("");

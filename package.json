@@ -2,7 +2,7 @@
   "name": "application-form-assistant",
   "version": "0.1.0",
   "private": true,
-  "description": "网申自动填写助手：Scan -> Recognize -> Match -> Risk Check -> Preview -> Human Confirm -> Fill",
+  "description": "网申助手：识别表单 → 选择资料库 → 覆盖填写。",
   "type": "module",
   "scripts": {
     "build": "npm run build:sidepanel && npm run build:content && npm run build:background",

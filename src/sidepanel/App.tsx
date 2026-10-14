@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CandidateField } from "../types/field";
+import { rawFieldKey, type CandidateField, type RawField } from "../types/field";
 import { Header } from "./components/Header";
 import { FieldList } from "./components/FieldList";
-import { FillReceipt } from "./components/FillReceipt";
 import { FillConfirmDialog } from "./components/FillConfirmDialog";
 import { ProfileEditor } from "./components/ProfileEditor";
-import { JobCard } from "./components/JobCard";
 import { TabBar, type MainTab } from "./components/TabBar";
 import { Stepper, type Step } from "./components/Stepper";
 import { useProfile } from "./hooks/useProfile";
@@ -27,32 +25,14 @@ import {
   rulesForHost,
   runScanPipeline,
   summarizeFillOutcome,
-  type FillSummary,
-  type RiskAssessment,
   type SiteMemory,
 } from "../core";
-import {
-  routeJob,
-  effectiveProfileType,
-  calculateProfileCoverage,
-  type ProfileSelection,
-} from "../profile/profileRouter";
 import { checkRuntimeBroadcasterSender } from "../utils/messageGuard";
-import { assembleProfile, loadStore, selectLibraryForDirection } from "../profile/libraryStore";
+import { assembleProfile, loadStore } from "../profile/libraryStore";
 import { profileHasContent } from "../profile/profileStore";
-import {
-  getActiveJob,
-  getJobHistory,
-  rememberJob,
-  setActiveJob,
-  clearActiveJob,
-  subscribeJobChanges,
-  setProfileOverride,
-  getProfileOverride,
-} from "../job/jobStore";
-import { RuleBasedJobParser, makeManualJobContext } from "../job/jobParser";
+import { makeManualJobContext } from "../job/jobParser";
 import type { JobContext } from "../job/schema";
-import { profileTypeLabel, type ProfileType } from "../job/profileTypes";
+import { type ProfileType } from "../job/profileTypes";
 import type {
   ScanPageResult,
   EnsureContentScriptResult,
@@ -69,11 +49,8 @@ import {
   upsertJobFromContext,
   appendEvent,
   migrateStorage,
-  getLatestOpenSession,
   createSession as createSessionV2,
   updateSession as updateSessionV2,
-  setActiveJobId as setWsActiveJob,
-  setJobStatus as setWsJobStatus,
 } from "../workspace/index";
 import { generateAnswer } from "../answering/answerGenerator";
 import { selectAnswerFacts, careerFactsFrom, companyFactsFrom } from "../answering/answerStrategy";
@@ -81,7 +58,6 @@ import { buildFactContext, extractJobRequirements } from "../generation/promptBu
 import { ANSWER_PROMPT_VERSION } from "../answering/promptBuilder";
 import {
   createSession,
-  getLatestSessionForJob,
   saveAnswerToSession,
   answerCacheKey,
   getCachedAnswer,
@@ -96,34 +72,16 @@ import {
   removeSiteRule,
   subscribeSiteMemoryChanges,
 } from "../site/siteMemory";
+import { findDuplicate, listJobs } from "../workspace/jobRepository";
 import { formatBytes, readStorageUsage, type StorageUsage } from "../utils/storageUsage";
 
-/**
- * 侧边栏主壳。
- *
- * 交互模型：
- *   ① 投递页只有一个主动作「开始识别」；
- *   ② 识别 = 连接页面 → 识别岗位与方向 → 识别表单字段 → 匹配资料；
- *   ③ 已匹配且可写入的字段直接进入 ConfirmedFillPlan 并填写，无法匹配或不支持的字段留给人工；
- *   ④ 写入统一经过 Field Writer → Write Verification，Undo 仅用于恢复；
- *   ⑤ 资料导入独立成「资料」页，Dev / Trace 收进「设置」页。
- */
+/** 识别只读；用户点选资料库后才按库内原文覆盖填写。 */
+type Phase = "idle" | "recognizing" | "selecting" | "ready" | "filling" | "done";
 
-type Phase = "idle" | "recognizing" | "ready" | "filling" | "done";
-
-interface StepDef {
-  key: string;
-  label: string;
-}
-
-const RECOGNIZE_STEPS: StepDef[] = [
-  { key: "page", label: "连接当前页面" },
-  { key: "job", label: "识别岗位与填写方向" },
-  { key: "scan", label: "识别需要填写的字段" },
-  { key: "match", label: "匹配你的资料" },
+const RECOGNIZE_STEPS = [
+  { key: "page", label: "连接页面" },
+  { key: "scan", label: "识别表单" },
 ];
-
-const jobParser = new RuleBasedJobParser();
 
 function hostOf(url?: string): string | undefined {
   if (!url) return undefined;
@@ -176,7 +134,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [candidates, setCandidates] = useState<CandidateField[]>([]);
-  const [fillSummary, setFillSummary] = useState<FillSummary | null>(null);
+
   const [originals, setOriginals] = useState<
     { reference: string; kind: string; previousValue: string; frameId?: number; undoTag?: string }[]
   >([]);
@@ -187,34 +145,19 @@ export default function App() {
   const [confirmTargets, setConfirmTargets] = useState<CandidateField[]>([]);
   const [mutated, setMutated] = useState(false);
   /** 本轮识别后是否执行过撤销：决定副标题说「已撤销」还是「这个页面没有可填字段」 */
-  const [undone, setUndone] = useState(false);
-  const [resumeInfo, setResumeInfo] = useState<{ sessionId: string; detectedFields: number } | null>(null);
-  const [showSubmitPrompt, setShowSubmitPrompt] = useState(false);
   const [inboxRefresh, setInboxRefresh] = useState(0);
 
   const [activeJob, setActiveJobState] = useState<JobContext | null>(null);
-  const [jobHistory, setJobHistory] = useState<JobContext[]>([]);
-  const [routing, setRouting] = useState<ProfileSelection | null>(null);
-  const [profileOverride, setOverrideState] = useState<ProfileType | null>(null);
-
+  const effectiveType: ProfileType = "general";
+  const scanRef = useRef<{ fields: RawField[]; url: string; tabId: number; title: string } | null>(null);
+  const busyRef = useRef(false);
+  const fillJobRef = useRef<string | null>(null);
+  const [usedLibraryName, setUsedLibraryName] = useState("");
   const sessionRef = useRef<string | null>(null);
   const sessionV2IdRef = useRef<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
   /* ---------------- 基础数据 ---------------- */
-
-  const refreshJobs = useCallback(async () => {
-    setActiveJobState(await getActiveJob());
-    setJobHistory(await getJobHistory());
-    setOverrideState(await getProfileOverride());
-  }, []);
-
-  useEffect(() => {
-    void refreshJobs();
-    return subscribeJobChanges(() => {
-      void refreshJobs();
-    });
-  }, [refreshJobs]);
 
   useEffect(() => {
     void loadApplyPrefs().then(setPrefs);
@@ -260,20 +203,6 @@ export default function App() {
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, []);
 
-  const effectiveType: ProfileType = useMemo(
-    () =>
-      effectiveProfileType(
-        routing ?? ({ primaryProfile: activeJob?.jobType ?? "general" } as ProfileSelection),
-        profileOverride,
-      ),
-    [routing, profileOverride, activeJob],
-  );
-
-  const coverage = useMemo(
-    () => (profile ? calculateProfileCoverage(profile, effectiveType) : null),
-    [profile, effectiveType],
-  );
-
   /** 资料还是空的：识别能认出字段，但一项都填不出来——先把用户引到导入，而不是让他对着空结果猜原因 */
   const needsProfile = useMemo(() => (profile ? !profileHasContent(profile) : false), [profile]);
 
@@ -293,20 +222,8 @@ export default function App() {
     [candidates],
   );
   const filledList = useMemo(() => candidates.filter((c) => c.status === "filled"), [candidates]);
-  const failedList = useMemo(() => candidates.filter((c) => c.status === "failed"), [candidates]);
-  const manualList = useMemo(
-    () => candidates.filter((c) => c.status === "manual" || c.status === "unsupported"),
-    [candidates],
-  );
-  /** 把握不足：资料有内容，但识别证据不够，扩展没有写它 —— 等的是人点一次头，不是等资料。
-   *  它和 AI 回答一起算在 `reviewTargets`（待你确认）里，界面上不再是「静默填了 62%」。 */
-  const noContentList = useMemo(
-    () => candidates.filter((c) => c.status === "empty" || c.status === "unknown"),
-    [candidates],
-  );
   const confirmable = useMemo(() => candidates.filter(isConfirmedFillable), [candidates]);
   /** 可直接填写：识别成功、有内容、非 MANUAL_ONLY。 */
-  const safeCount = useMemo(() => candidates.filter(isSafeFillable).length, [candidates]);
 
   /**
    * 主按钮要写入的字段：
@@ -327,7 +244,7 @@ export default function App() {
   const handleGenerateAnswer = useCallback(
     async (reference: string) => {
       if (!profile || !activeJob) return;
-      const candidate = candidates.find((c) => c.raw.reference === reference);
+      const candidate = candidates.find((c) => rawFieldKey(c.raw) === reference);
       const open = candidate?.openAnswer;
       if (!candidate || !open) return;
 
@@ -346,10 +263,7 @@ export default function App() {
         ...profile.campus.map((e, i) => ({ e, id: `campus-${i}`, label: "校园经历" })),
       ];
       if (intent === "representative_project") {
-        const firstId = routing?.recommendedExperienceIds[0];
-        const idx = firstId ? Number(firstId.split("-")[1] ?? 0) : 0;
-        const collection = firstId?.split("-")[0] ?? "internships";
-        const target = allCollections.find((x) => x.id === `${collection}-${idx}`) ?? allCollections[0];
+        const target = allCollections[0];
         if (target) personalFacts = buildFactContext(target.id, target.label, target.e).facts;
       } else {
         const merged = allCollections.flatMap(({ e, id, label }) => buildFactContext(id, label, e).facts);
@@ -415,7 +329,7 @@ export default function App() {
 
       setCandidates((prev) =>
         prev.map((c) => {
-          if (c.raw.reference !== reference || !c.openAnswer) return c;
+          if (rawFieldKey(c.raw) !== reference || !c.openAnswer) return c;
           if (structured.status === "insufficient_context") {
             return {
               ...c,
@@ -466,13 +380,13 @@ export default function App() {
         await trace("ANSWER_SAVE_TO_SESSION", "success", intent, { intent });
       }
     },
-    [profile, activeJob, candidates, routing],
+    [profile, activeJob, candidates],
   );
 
   const handleRevalidateAnswer = useCallback(
     async (reference: string) => {
       if (!profile || !activeJob) return;
-      const candidate = candidates.find((c) => c.raw.reference === reference);
+      const candidate = candidates.find((c) => rawFieldKey(c.raw) === reference);
       const open = candidate?.openAnswer;
       if (!candidate || !open) return;
       const draft = candidate.editedValue ?? "";
@@ -491,7 +405,7 @@ export default function App() {
       const blocked = validation.overall === "fail";
       setCandidates((prev) =>
         prev.map((c) =>
-          c.raw.reference === reference && c.openAnswer
+          rawFieldKey(c.raw) === reference && c.openAnswer
             ? {
                 ...c,
                 status: blocked ? "unknown" : "need-confirm",
@@ -516,65 +430,6 @@ export default function App() {
     [profile, activeJob, candidates],
   );
 
-  /* ---------------- 岗位方向 ---------------- */
-
-  const handleOverrideProfile = useCallback(
-    async (type: ProfileType | null) => {
-      await setProfileOverride(type);
-      logger.event(LogEvent.PREVIEW_OVERRIDE, type ? `manual_override=${type}` : "manual_override=cleared");
-      if (!profile) return;
-
-      // 方向变了 → 资料库跟着走；清除 override 时回到路由出来的方向
-      const direction = type ?? routing?.primaryProfile ?? "general";
-      const storeNow = await loadStore();
-      const chosen = selectLibraryForDirection(storeNow, direction);
-      if (chosen.id !== storeNow.activeLibraryId) await switchLibrary(chosen.id);
-      const profNow = assembleProfile(storeNow.shared, chosen.content);
-
-      setCandidates((prev) =>
-        prev.map((c) => {
-          const idValid = isCanonicalFieldId(c.match.fieldId);
-          if (!idValid) return c;
-          const fresh = resolveValue(c.match.fieldId, profNow, {
-            entryIndex: c.entryIndex,
-            profileType: direction,
-          });
-          const riskLike = { risk: c.risk, reason: c.riskReason } as RiskAssessment;
-          const derived = deriveStatus(c.raw, c.match, riskLike, idValid, fresh);
-          return {
-            ...c,
-            value: fresh ?? undefined,
-            status: derived.status,
-            riskReason: derived.riskReason ?? c.riskReason,
-            editedValue: undefined,
-            // 内容来源变了 → 之前的确认作废，必须重看一遍
-            confirmed: false,
-          };
-        }),
-      );
-    },
-    [profile, routing, switchLibrary],
-  );
-
-  const handleManualSelect = useCallback(
-    async (type: ProfileType) => {
-      await rememberJob(makeManualJobContext(type));
-      // 手动指定方向时也把资料库切到对应库
-      const storeNow = await loadStore();
-      const chosen = selectLibraryForDirection(storeNow, type);
-      if (chosen.id !== storeNow.activeLibraryId) await switchLibrary(chosen.id);
-    },
-    [switchLibrary],
-  );
-
-  const handleSelectJob = useCallback(async (jobId: string) => {
-    await setActiveJob(jobId);
-  }, []);
-
-  const handleClearJob = useCallback(async () => {
-    await clearActiveJob();
-  }, []);
-
   /* ---------------- 写入层 ---------------- */
 
   /**
@@ -589,7 +444,7 @@ export default function App() {
       const plan = buildFillPlan(targets, jobId, effType);
       // 运行时门禁：plan 必须经过用户确认且非空（正常路径由 buildFillPlan 保证）
       if (plan.confirmed !== true || plan.fields.length === 0) {
-        throw new Error("写入被拒绝：没有已填写的字段");
+        throw new Error("没有可填写的内容");
       }
       await trace("FILL_PLAN_CREATE", "success", `approved=${plan.fields.length}`, {
         approved: plan.fields.length,
@@ -599,6 +454,8 @@ export default function App() {
       const res = (await chrome.runtime.sendMessage({
         type: "FILL_TARGET",
         plan: { confirmed: plan.confirmed, fields: plan.fields },
+        expectedUrl: scanRef.current?.url,
+        expectedTabId: scanRef.current?.tabId,
       })) as FillFieldsResult;
       if (!res?.ok) throw new Error(res?.error || "写入请求失败");
       return { plan, outcomes: res.outcomes, originals: res.originals };
@@ -623,30 +480,29 @@ export default function App() {
         const { plan, outcomes: fillOutcomes, originals: newOriginals } = await writeFields(
           confirmedTargets,
           effectiveType,
-          activeJob?.id ?? null,
+          fillJobRef.current,
         );
         if (plan.fields.length === 0) throw new Error("没有可填写的字段");
         const outcomeMap = new Map(fillOutcomes.map((o) => [`${o.frameId ?? 0}|${o.reference}`, o]));
-        setCandidates((prev) =>
-          prev.map((c) => {
-            const outcome = outcomeMap.get(`${c.raw.frameId ?? 0}|${c.raw.reference}`);
-            if (!outcome) return c;
-            return { ...c, status: outcome.status === "filled" ? "filled" : "failed", confirmed: false, fillDetail: outcome.detail };
-          }),
-        );
+        const updatedCandidates = sourceCandidates.map((c): CandidateField => {
+          const outcome = outcomeMap.get(rawFieldKey(c.raw));
+          return outcome ? { ...c, status: outcome.status === "filled" ? "filled" : "failed", confirmed: false, fillDetail: outcome.detail } : c;
+        });
+        setCandidates(updatedCandidates);
         const summary = summarizeFillOutcome(plan, fillOutcomes, sourceCandidates);
-        setFillSummary(summary);
         setOriginals((prev) => [...prev, ...newOriginals]);
         setPhase("done");
-        setShowSubmitPrompt(true);
         if (sessionV2IdRef.current) {
-          void updateSessionV2(sessionV2IdRef.current, {
-            status: "filled",
-            fillPlanSummary: `${summary.filled}/${summary.filled + summary.failed} 字段`,
+          const relevant = updatedCandidates.filter((c) => c.status !== "excluded" && c.status !== "ignored");
+          const filled = relevant.filter((c) => c.status === "filled").length;
+          await updateSessionV2(sessionV2IdRef.current, {
+            status: relevant.every((c) => c.status === "filled") ? "filled" : "reviewing",
+            fillPlanSummary: `${filled}/${relevant.length} 字段`,
           });
-          if (activeJob) {
+          setInboxRefresh((n) => n + 1);
+          if (fillJobRef.current) {
             void appendEvent({
-              jobId: activeJob.id,
+              jobId: fillJobRef.current,
               type: "FORM_FILLED",
               timestamp: new Date().toISOString(),
               metadata: {},
@@ -668,7 +524,7 @@ export default function App() {
         return false;
       }
     },
-    [activeJob, effectiveType, writeFields],
+    [effectiveType, writeFields],
   );
 
   /* ---------------- 主流程：识别 ---------------- */
@@ -677,281 +533,120 @@ export default function App() {
     setSteps((prev) => prev.map((s) => (s.key === key ? { ...s, state, detail: detail ?? s.detail } : s)));
   }, []);
 
-  /** 尝试把当前页当 JD 页捕获；抓不到就返回 null（不报错、不写脏数据） */
-  const tryCaptureJob = useCallback(async (): Promise<JobContext | null> => {
-    try {
-      const res = (await chrome.runtime.sendMessage({ type: "CAPTURE_TARGET" })) as {
-        ok: boolean;
-        raw?: unknown;
-        error?: string;
-      };
-      if (!res?.ok || !res.raw) return null;
-      const job = await jobParser.parse(res.raw as Parameters<RuleBasedJobParser["parse"]>[0]);
-      // 岗位名就是这个记录的身份证：抓不到岗位名的页面（点「投递」后展开的申请子页、列表页、
-      // 登录面板）不许新建或覆盖岗位，否则真机 Lever 上「Spotify · Android Engineer - Experience」
-      // 会被 `/apply` 页的一次再识别改成「未识别岗位」（jd 里带职位描述，长度守卫拦不住）。
-      if (job.position === "未识别岗位") return null;
-      // Safety Flow 补充守卫：表单页可能解析出「校招申请表」这类伪岗位（jd 超长但无 JD 正文标记）。
-      // 真实 JD 页必有岗位职责/任职要求类标记——没有标记的一律不捕获（防止 autoCaptureJob 覆盖真岗位）。
-      if (!/(岗位职责|任职要求|职位描述|工作职责|工作内容|responsibilities|requirements|job description)/i.test(job.jd)) {
-        return null;
-      }
-      await rememberJob(job);
-      const upsert = await upsertJobFromContext(job);
-      await appendEvent({
-        jobId: upsert.record.id,
-        type: upsert.reused ? "JOB_UPDATED" : "JOB_CAPTURED",
-        timestamp: new Date().toISOString(),
-        metadata: { company: upsert.record.company ?? "", position: upsert.record.position ?? "" },
-      });
-      setInboxRefresh((n) => n + 1);
-      await trace("JOB_CAPTURE", "success", `${job.company || "?"} ${job.position} → ${job.jobType}`, {
-        jobType: job.jobType,
-        jdLength: job.jd.length,
-      });
-      return job;
-    } catch {
-      return null;
-    }
-  }, []);
-
   const handleRecognize = useCallback(async () => {
-    if (!profile) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setPhase("recognizing");
     setError("");
     setNotice("");
-    setFillSummary(null);
     setMutated(false);
-    setUndone(false);
-    setShowSubmitPrompt(false);
-    setSteps(RECOGNIZE_STEPS.map((s) => ({ ...s, state: "pending" as const })));
+    setCandidates([]);
+    setPreviewRevealed(false);
+    setSteps(RECOGNIZE_STEPS.map((step) => ({ ...step, state: "pending" as const })));
+    scanRef.current = null;
     if (!getTraceId()) startTrace();
-
     try {
-      /* ① 页面 */
       markStep("page", "running");
-      const ensure = (await chrome.runtime.sendMessage({
-        type: "ENSURE_CONTENT_SCRIPT",
-      })) as EnsureContentScriptResult;
-      if (!ensure?.ok) {
-        markStep("page", "failed");
-        setError(
-          ensure?.error === "unsupported-url"
-            ? "当前页面不是网页（http / https），无法识别表单。请打开招聘网站的表单页后重试。"
-            : `无法连接页面：${ensure?.detail || ensure?.error || "未知错误"}`,
-        );
-        setPhase("idle");
-        return;
-      }
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab?.id) throw new Error("找不到活动标签页");
-      setUrl(ensure.url ?? "");
-      // 站点记忆按**这一次实际连上的那个 host**取规则：不能用上一次的 url state
-      // （同一面板里从 A 站切到 B 站时它是旧的，套错站的规则就是把上家公司的判断
-      //  塞进这一家的表单 —— 那正是「填错」而不是「没填」）
-      const hostNow = hostFromUrl(ensure.url);
-      const rulesNow = rulesForHost(siteMemory, hostNow);
-      markStep("page", "done", hostOf(ensure.url) ?? "已连接");
-
-      /* ② 岗位与方向 */
-      markStep("job", "running");
-      let job = activeJob;
-      if (prefs.autoCaptureJob) {
-        const captured = await tryCaptureJob();
-        if (captured) job = captured;
-      }
-      let effectiveNow: ProfileType = "general";
-      let routingNow: ProfileSelection | null = null;
-      if (job) {
-        routingNow = routeJob(job, profile);
-        effectiveNow = effectiveProfileType(routingNow, profileOverride);
-      } else {
-        markStep("job", "skipped", "没读到岗位，用通用版本");
-      }
-
-      /* ②.5 按方向选资料库：方向 → 库，顺便把「当前资料库」切过去 */
-      const storeNow = await loadStore();
-      const chosenLib = selectLibraryForDirection(storeNow, effectiveNow);
-      if (chosenLib.id !== storeNow.activeLibraryId) {
-        await switchLibrary(chosenLib.id);
-        await trace("LIBRARY_SWITCH", "success", `direction=${effectiveNow} → ${chosenLib.name}`, {
-          direction: effectiveNow,
-        });
-      }
-      const profNow = assembleProfile(storeNow.shared, chosenLib.content);
-
-      if (job) {
-        // 用选定库的经历重新算一次推荐（recommendedExperienceIds 取决于库内配了哪些方向变体）
-        routingNow = routeJob(job, profNow);
-        setRouting(routingNow);
-        await trace("PROFILE_ROUTE", "success", `${routingNow.primaryProfile} effective=${effectiveNow}`, {
-          routed: routingNow.primaryProfile,
-          effective: effectiveNow,
-          confidence: routingNow.routingConfidence,
-          override: profileOverride ?? "none",
-        });
-      } else {
-        setRouting(null);
-      }
-      markStep(
-        "job",
-        "done",
-        `${profileTypeLabel(effectiveNow)} · 资料库「${chosenLib.name}」`,
-      );
-
-      /* ③ 表单字段 */
+      const ensure = await chrome.runtime.sendMessage({ type: "ENSURE_CONTENT_SCRIPT" }) as EnsureContentScriptResult;
+      if (!ensure?.ok) throw new Error(ensure?.detail || (ensure?.error === "no-active-tab"
+        ? "找不到当前网页，请回到网申标签页后重试" : "无法连接当前网页，请刷新页面后重试"));
+      if (ensure.tabId == null) throw new Error("扩展后台尚未更新，请在扩展管理页重新加载网申助手，再关闭并重新打开侧栏");
+      if (!ensure.url) throw new Error("无法读取当前网页地址，请允许扩展在此网站运行，刷新网页后重试");
+      setUrl(ensure.url);
+      markStep("page", "done", hostOf(ensure.url));
       markStep("scan", "running");
-      const res = (await chrome.runtime.sendMessage({ type: "SCAN_TARGET" })) as ScanPageResult;
-      if (!res?.ok || !res.fields) {
-        markStep("scan", "failed");
-        setError(`识别失败：${res?.error ?? "未知错误"}`);
+      const res = await chrome.runtime.sendMessage({ type: "SCAN_TARGET", expectedUrl: ensure.url, expectedTabId: ensure.tabId }) as ScanPageResult;
+      if (!res?.ok || !res.fields) throw new Error(res?.error || "无法读取表单");
+      const target = await chrome.tabs.get(ensure.tabId);
+      scanRef.current = { fields: res.fields, url: ensure.url, tabId: ensure.tabId, title: target.title || hostOf(ensure.url) || "申请记录" };
+      // 换到另一页面后，不能拿上一页面的撤销记录去恢复相似字段。
+      setOriginals((prev) => ensure.url === url ? prev : []);
+      markStep("scan", "done", `${res.fields.length} 项`);
+      if (res.fields.length === 0) {
+        setNotice("未找到表单，请进入网申填写页后重试。");
         setPhase("idle");
-        return;
-      }
-      logger.event(LogEvent.SCAN_START, `识别到 ${res.fields.length} 个字段`);
-      markStep("scan", "done", `${res.fields.length} 个字段`);
-
-      /* Session（Stage 5）：创建/复用 + Resume 提示 */
-      if (job) {
-        const open = await getLatestOpenSession(job.id);
-        if (open) {
-          sessionV2IdRef.current = open.sessionId;
-          setResumeInfo({ sessionId: open.sessionId, detectedFields: open.detectedFields });
-          await updateSessionV2(open.sessionId, { status: "scanned", detectedFields: res.fields.length });
-        } else {
-          const created = await createSessionV2({
-            jobId: job.id,
-            jobContextId: job.id,
-            effectiveProfileType: effectiveNow,
-            sourceUrl: job.sourceUrl,
-            traceId: getTraceId(),
-          });
-          sessionV2IdRef.current = created.sessionId;
-          setResumeInfo(null);
-          await updateSessionV2(created.sessionId, { detectedFields: res.fields.length });
-          await appendEvent({
-            jobId: job.id,
-            sessionId: created.sessionId,
-            type: "SESSION_CREATED",
-            timestamp: new Date().toISOString(),
-            metadata: {},
-          });
-        }
-      }
-
-      let restoredSessionAnswers: import("../answering/types").AnswerSnapshot[] = [];
-      if (job) {
-        const existing = await getLatestSessionForJob(job.id);
-        if (existing) {
-          sessionRef.current = existing.sessionId;
-          restoredSessionAnswers = existing.answers;
-        } else {
-          const created = await createSession(job.id, effectiveNow);
-          sessionRef.current = created.sessionId;
-        }
-      }
-
-      /* ④ 匹配资料 */
-      markStep("match", "running");
-      const scanned = runScanPipeline(res.fields, profNow, { profileType: effectiveNow, siteRules: rulesNow }).map((c) => {
-        if (!c.openAnswer || !job) return c;
-        const hit = restoredSessionAnswers.find((a) => a.question === c.openAnswer!.question && a.answer);
-        if (!hit) return c;
-        const companyFacts = companyFactsFrom(job);
-        const careerFacts = careerFactsFrom(profNow.careerPreferences);
-        const allFacts = [...profNow.internships, ...profNow.projects, ...profNow.campus].flatMap((e, i) =>
-          buildFactContext(`exp-${i}`, "经历", e).facts,
-        );
-        const validation = validateAnswer(
-          hit.answer,
-          allFacts,
-          companyFacts,
-          careerFacts,
-          c.openAnswer.lengthConstraint ?? {
-            maxLength: c.raw.context.maxLength,
-            targetCharacters: c.raw.context.maxLength ?? 300,
-          },
-        );
-        const blocked = validation.overall === "fail";
-        return {
-          ...c,
-          status: blocked ? ("unknown" as const) : ("need-confirm" as const),
-          editedValue: blocked ? undefined : hit.answer,
-          value: blocked
-            ? undefined
-            : {
-                fieldId: "open.question",
-                value: hit.answer,
-                variant: "plain" as const,
-                editable: true,
-                sourceType: "ai_grounded" as const,
-              },
-          openAnswer: { ...c.openAnswer, status: "generated" as const, answer: hit.answer, validation },
-        };
-      });
-
-      // 用户已选择自动填写所有有内容的匹配字段；MANUAL_ONLY / unknown 仍不进入计划，
-      // 低置信（low-confidence）现在也不静默填 —— 等人在卡片上点一次「确认要填这一项」。
-      const withConfirm = scanned.map((c) => (isSafeFillable(c) ? { ...c, confirmed: true } : c));
-      setCandidates(withConfirm);
-      const autoTargets = withConfirm.filter(isSafeFillable);
-      const awaitingNow = withConfirm.filter((c) => c.status === "low-confidence").length;
-      const siteSkipped = withConfirm.filter((c) => !!c.siteRule).length;
-      markStep(
-        "match",
-        "done",
-        `已识别 ${res.fields.length} 个字段，其中 ${autoTargets.length} 项可直接填写` +
-          (awaitingNow ? `，${awaitingNow} 项要你核对` : ""),
-      );
-      await trace("PREVIEW_READY", "success", `${res.fields.length} fields profileType=${effectiveNow}`, {
-        profileType: effectiveNow,
-      });
-
-      if (autoTargets.length > 0 && prefs.autoFill) {
-        await applyFill(autoTargets, withConfirm);
-        if (awaitingNow > 0) {
-          setNotice(
-            `另有 ${awaitingNow} 项识别把握不足，扩展没有替你填 —— 在清单里核对后点「核对过了，确认要填这一项」。`,
-          );
-        }
-      } else if (autoTargets.length > 0) {
-        // 用户关掉了自动填写：先把清单摊开，勾选后由「确认并填写」写入
-        setPreviewRevealed(true);
-        setNotice(
-          `已识别 ${res.fields.length} 个字段，其中 ${autoTargets.length} 项可填写。勾选后点「确认并填写」。` +
-            (awaitingNow ? ` 另有 ${awaitingNow} 项把握不足，需要你核对。` : ""),
-        );
-        setPhase("ready");
       } else {
-        setPreviewRevealed(awaitingNow > 0 || siteSkipped > 0);
-        setNotice(
-          res.fields.length === 0
-            ? "这个页面没有需要填写的表单字段。岗位已经记录，进入网申页后再点「开始识别」。"
-            : awaitingNow > 0
-              ? `已识别 ${res.fields.length} 个字段，${awaitingNow} 项把握不足需要你核对后再填 —— 其余没有匹配到资料的可填写项，扩展不猜。`
-              : `已识别 ${res.fields.length} 个字段，暂无匹配到资料的可填写项。`,
-        );
-        setPhase("ready");
+        setPhase("selecting");
       }
     } catch (err) {
-      setError(`识别失败：${err instanceof Error ? err.message : String(err)}（请刷新页面后重试）`);
+      setError(err instanceof Error ? err.message : String(err));
       setPhase("idle");
+    } finally {
+      busyRef.current = false;
     }
-  }, [activeJob, applyFill, markStep, prefs.autoCaptureJob, prefs.autoFill, profile, profileOverride, siteMemory, switchLibrary, tryCaptureJob]);
+  }, [markStep, url]);
+
+  const handleChooseLibrary = useCallback(async (libraryId: string) => {
+    const scan = scanRef.current;
+    if (!scan || busyRef.current) return;
+    busyRef.current = true;
+    setPhase("filling");
+    setError("");
+    setNotice("");
+    try {
+      // 选库期间网页可能继续加载；填写前重新扫描，并校验仍是同一个标签页和地址。
+      const res = await chrome.runtime.sendMessage({ type: "SCAN_TARGET", expectedUrl: scan.url, expectedTabId: scan.tabId }) as ScanPageResult;
+      if (!res?.ok || !res.fields) throw new Error(res?.error || "页面已变化，请重新识别");
+      const store = await loadStore();
+      const library = store.libraries.find((item) => item.id === libraryId);
+      if (!library) throw new Error("资料库已删除，请重新选择");
+      const chosenProfile = assembleProfile(store.shared, library.content);
+      await switchLibrary(libraryId);
+      setUsedLibraryName(library.name);
+      const scanned = runScanPipeline(res.fields, chosenProfile, {
+        profileType: "general",
+        siteRules: rulesForHost(siteMemory, hostFromUrl(scan.url)),
+      });
+      setCandidates(scanned);
+      setPreviewRevealed(true);
+      const targets = scanned.filter(isSafeFillable);
+      // 只记录本页和填写结果，不再从网页识别岗位或决定资料方向。
+      const existing = findDuplicate(await listJobs(), { sourceUrl: scan.url, company: "", position: scan.title });
+      const record = existing ?? (await upsertJobFromContext({
+        ...makeManualJobContext("general", scan.url), position: scan.title, pageTitle: scan.title,
+      })).record;
+      setActiveJobState(record);
+      fillJobRef.current = record.id;
+      const session = await createSessionV2({ jobId: record.id, jobContextId: record.id,
+        effectiveProfileType: "general", sourceUrl: scan.url, traceId: getTraceId() });
+      sessionV2IdRef.current = session.sessionId;
+      await updateSessionV2(session.sessionId, { status: "scanned", detectedFields: scanned.filter((c) => c.status !== "excluded").length });
+      sessionRef.current = (await createSession(record.id, "general")).sessionId;
+      if (targets.length === 0) {
+        setNotice("没有可自动填写的内容，请检查资料或字段匹配。");
+        setPhase("ready");
+      } else {
+        await applyFill(targets, scanned);
+      }
+      setInboxRefresh((n) => n + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setPhase("selecting");
+    } finally {
+      busyRef.current = false;
+    }
+  }, [applyFill, siteMemory, switchLibrary]);
 
   /* ---------------- 主流程：填写剩余已确认项 ---------------- */
 
   const handleFillConfirmed = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setShowConfirm(false);
-    await applyFill(confirmTargets, candidates);
+    try { await applyFill(confirmTargets, candidates); } finally { busyRef.current = false; }
   }, [applyFill, candidates, confirmTargets]);
 
   const handleUndo = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     try {
       const res = (await chrome.runtime.sendMessage({
         type: "UNDO_TARGET",
-        originals,
+        originals: [...originals].reverse(),
+        expectedUrl: scanRef.current?.url,
+        expectedTabId: scanRef.current?.tabId,
       })) as UndoResult;
+      if (!res?.ok) throw new Error(res?.error || "无法撤销");
       if (res?.ok) {
         setCandidates((prev) =>
           prev.map((c) =>
@@ -960,78 +655,35 @@ export default function App() {
               : c,
           ),
         );
-        setFillSummary(null);
-        setOriginals([]);
-        setUndone(true);
+        if (res.failed === 0) setOriginals([]);
+        if (sessionV2IdRef.current) await updateSessionV2(sessionV2IdRef.current, { status: "scanned", fillPlanSummary: "" });
+        setInboxRefresh((n) => n + 1);
         setNotice(
           res.failed > 0
-            ? `已撤销本次填写，恢复 ${res.restored} 个字段；${res.failed} 个字段页面没有交还控制权，请在网页上手动清空。`
+            ? `已撤销本次填写，恢复 ${res.restored} 个字段；${res.failed} 个字段未能恢复，请重试或在网页核对。`
             : `已撤销本次填写，恢复 ${res.restored} 个字段。`,
         );
         logger.event(LogEvent.UNDO_SUCCESS, `撤销完成 恢复${res.restored} 失败${res.failed}`);
       }
     } catch (err) {
       setError(`撤销失败：${String(err)}`);
+    } finally {
+      busyRef.current = false;
     }
   }, [originals]);
-
-  const handleMarkSubmitted = useCallback(async () => {
-    if (!activeJob) return;
-    await setWsJobStatus(activeJob.id, "submitted");
-    await appendEvent({
-      jobId: activeJob.id,
-      type: "JOB_SUBMITTED",
-      timestamp: new Date().toISOString(),
-      metadata: { sourceUrl: activeJob.sourceUrl },
-    });
-    if (sessionV2IdRef.current) await updateSessionV2(sessionV2IdRef.current, { status: "completed" });
-    setShowSubmitPrompt(false);
-    setInboxRefresh((n) => n + 1);
-    setNotice("已标记为已投递。");
-  }, [activeJob]);
-
-  const handleStartNewSession = useCallback(async () => {
-    if (!activeJob || !effectiveType) return;
-    const created = await createSessionV2({
-      jobId: activeJob.id,
-      jobContextId: activeJob.id,
-      effectiveProfileType: effectiveType,
-      sourceUrl: activeJob.sourceUrl,
-      traceId: getTraceId(),
-    });
-    sessionV2IdRef.current = created.sessionId;
-    setResumeInfo(null);
-  }, [activeJob, effectiveType]);
-
-  const handleContinueSession = useCallback(async () => {
-    if (resumeInfo) {
-      sessionV2IdRef.current = resumeInfo.sessionId;
-      await updateSessionV2(resumeInfo.sessionId, { status: "reviewing" });
-      await appendEvent({
-        jobId: activeJob?.id ?? "",
-        sessionId: resumeInfo.sessionId,
-        type: "SESSION_RESUMED",
-        timestamp: new Date().toISOString(),
-        metadata: {},
-      });
-      setResumeInfo(null);
-    }
-  }, [resumeInfo, activeJob]);
 
   /* ---------------- 字段级操作 ---------------- */
 
   const toggleConfirm = (reference: string) =>
     setCandidates((prev) =>
-      prev.map((c) => (c.raw.reference === reference ? { ...c, confirmed: !c.confirmed } : c)),
+      prev.map((c) => (rawFieldKey(c.raw) === reference ? { ...c, confirmed: !c.confirmed } : c)),
     );
 
-  const confirmAllConfirmable = () =>
-    setCandidates((prev) => prev.map((c) => (isConfirmable(c) ? { ...c, confirmed: true } : c)));
 
   const editValue = (reference: string, value: string) =>
     setCandidates((prev) =>
       prev.map((c) => {
-        if (c.raw.reference !== reference) return c;
+        if (rawFieldKey(c.raw) !== reference) return c;
         const base = {
           ...c,
           // 已经填过的字段被用户改了值 → 回到「待填写」，让它重新进入填写计划；
@@ -1048,7 +700,7 @@ export default function App() {
   const ignore = (reference: string) =>
     setCandidates((prev) =>
       prev.map((c) =>
-        c.raw.reference === reference ? { ...c, preIgnoreStatus: c.status, status: "ignored", confirmed: false } : c,
+        rawFieldKey(c.raw) === reference ? { ...c, preIgnoreStatus: c.status, status: "ignored", confirmed: false } : c,
       ),
     );
 
@@ -1056,7 +708,7 @@ export default function App() {
   const unignore = (reference: string) =>
     setCandidates((prev) =>
       prev.map((c) =>
-        c.raw.reference === reference && c.status === "ignored"
+        rawFieldKey(c.raw) === reference && c.status === "ignored"
           ? { ...c, status: c.preIgnoreStatus ?? "unknown", preIgnoreStatus: undefined }
           : c,
       ),
@@ -1110,10 +762,10 @@ export default function App() {
    */
   const switchMatchedField = (reference: string, fieldId: string) => {
     if (!profile || !isCanonicalFieldId(fieldId)) return;
-    const target = candidates.find((c) => c.raw.reference === reference);
+    const target = candidates.find((c) => rawFieldKey(c.raw) === reference);
     setCandidates((prev) =>
       prev.map((c) => {
-        if (c.raw.reference !== reference) return c;
+        if (rawFieldKey(c.raw) !== reference) return c;
         const next = rejudgeCandidate(c, fieldId);
         return { ...next, siteRule: siteHost ? { ruleId: `pending_${reference}`, host: siteHost, kind: "map" as const } : undefined };
       }),
@@ -1126,7 +778,7 @@ export default function App() {
           // 把占位 ruleId 换成真实那条，撤销按钮才找得到它
           setCandidates((prev) =>
             prev.map((c) =>
-              c.raw.reference === reference && c.siteRule?.kind === "map"
+              rawFieldKey(c.raw) === reference && c.siteRule?.kind === "map"
                 ? { ...c, siteRule: { ...c.siteRule, ruleId: rule.id, host: rule.host, overriddenFieldId: matchField(c.raw).fieldId } }
                 : c,
             ),
@@ -1146,7 +798,7 @@ export default function App() {
   const confirmLowConfidence = (reference: string) => {
     setCandidates((prev) =>
       prev.map((c) =>
-        c.raw.reference === reference && c.status === "low-confidence"
+        rawFieldKey(c.raw) === reference && c.status === "low-confidence"
           ? { ...c, status: "need-confirm", confirmed: true }
           : c,
       ),
@@ -1156,7 +808,7 @@ export default function App() {
 
   /** 「这一站以后都别填这一项」：写进站点记忆，并把当前这张卡立刻切成跳过 */
   const blockOnSite = async (reference: string) => {
-    const target = candidates.find((c) => c.raw.reference === reference);
+    const target = candidates.find((c) => rawFieldKey(c.raw) === reference);
     if (!target || !siteHost) return;
     const { memory, rule } = await addSiteRule({ host: siteHost, ctx: target.raw.context, kind: "block" });
     setSiteMemory(memory);
@@ -1167,7 +819,7 @@ export default function App() {
     }
     setCandidates((prev) =>
       prev.map((c) =>
-        c.raw.reference === reference
+        rawFieldKey(c.raw) === reference
           ? {
               ...c,
               preIgnoreStatus: c.status,
@@ -1202,11 +854,12 @@ export default function App() {
   };
 
   const locate = async (reference: string) => {
-    const target = candidates.find((c) => c.raw.reference === reference);
+    const target = candidates.find((c) => rawFieldKey(c.raw) === reference);
+    if (!target) return;
     try {
       await chrome.runtime.sendMessage({
         type: "LOCATE_TARGET",
-        reference,
+        reference: target.raw.reference,
         frameId: target?.raw.frameId ?? 0,
       });
     } catch {
@@ -1229,280 +882,70 @@ export default function App() {
   }
 
   const anyPending = reviewTargets.length;
-  /** 招聘官网的职位详情页常是这个形态：岗位读到了，但表单在「投递」之后（往往还要登录） */
-  const noFormHint = activeJob
-    ? "这个页面没有网申表单字段（岗位已记录，进入投递页再识别）"
-    : "这个页面没有网申表单字段，也没抓到岗位名——在岗位页面识别一次，或直接进投递页再识别";
-  /** 识别完成后副标题只说「下一步做什么」，不重复下面的汇总数字 */
-  const doneHint =
-    anyPending > 0
-      ? `还有 ${anyPending} 项需要你确认`
-      : filledList.length > 0
-        ? fillSummary && fillSummary.manualBlocked > 0
-          ? `已填好 ${filledList.length} 项，另有 ${fillSummary.manualBlocked} 项按安全规则留给你本人填写；请核对后自行点击提交`
-          : `已填好 ${filledList.length} 项，请核对后自行点击提交`
-        : undone
-          ? "网页上的内容已撤销，可重新识别"
-          : candidates.length === 0
-            ? noFormHint
-            : "这个页面没有可以自动填写的字段，网页内容未被修改";
-  const subtitle =
-    tab === "apply"
-      ? phase === "idle"
-        ? "打开网申页面，点一下「开始识别」"
-        : phase === "recognizing"
-          ? "识别中…"
-          : phase === "done"
-            ? doneHint
-            : candidates.length === 0
-              ? noFormHint
-              : `待确认 ${reviewTargets.length} · 已填写 ${filledList.length}`
-      : tab === "jobs"
-        ? "已捕获的岗位与投递记录"
-        : tab === "profile"
-          ? "导入和维护你的背景资料"
-          : "模型与高级选项";
-
+  const visibleFields = candidates.filter((c) => c.status !== "excluded");
+  const unfilledCount = visibleFields.filter((c) => c.status !== "filled" && c.status !== "ignored").length;
+  const busy = phase === "recognizing" || phase === "filling";
+  const subtitle = tab === "apply" ? undefined : tab === "jobs" ? "申请记录" : tab === "profile" ? "资料库" : "偏好设置";
   const applyView = (
-    <main className="main">
-      {loadProblem && <div className="banner banner-error">{loadProblem}</div>}
-      {error && (
-        <div className="banner banner-error">
-          {error.split("\n").map((l, i) => (
-            <p key={i}>{l}</p>
-          ))}
-        </div>
-      )}
-      {notice && <div className="banner banner-ok">{notice}</div>}
-      {mutated && (
-        <div className="banner banner-review">
-          页面结构变了，建议重新识别一次。
-          <button type="button" className="btn-sm" onClick={() => void handleRecognize()}>
-            重新识别
-          </button>
-        </div>
-      )}
-      {resumeInfo && (
-        <div className="banner banner-review">
-          这个岗位有一份没走完的申请（上次识别到 {resumeInfo.detectedFields} 个字段）。
-          <button type="button" className="btn-sm" onClick={() => void handleContinueSession()}>
-            继续上次
-          </button>
-          <button type="button" className="btn-sm" onClick={() => void handleStartNewSession()}>
-            重新开始
-          </button>
-        </div>
-      )}
-      {showSubmitPrompt && filledList.length > 0 && (
-        /* 撤销之后 filledList 清空：这条「表单已填写，请自行提交」必须跟着消失，
-           否则页面上会同时出现「已撤销本次填写」和「表单已填写」两句互相矛盾的话。 */
-        <div className="banner banner-ok">
-          表单已填写。请核对后在网站上<strong>自己点击提交</strong>。
-          <button type="button" className="btn-sm" onClick={() => void handleMarkSubmitted()}>
-            我已完成投递
-          </button>
-        </div>
-      )}
-
+    <main className="main apply-main">
+      {loadProblem && <div role="alert" className="banner banner-error">{loadProblem}</div>}
+      {error && <div role="alert" className="banner banner-error">{error}</div>}
+      {notice && <div role="status" className="banner">{notice}</div>}
+      {mutated && !busy && <div className="banner banner-review">页面有变化，可重新识别。</div>}
       {phase === "idle" && (
         <section className="hero">
-          <h2 className="hero-title">开始识别</h2>
-          <p className="hero-desc">
-            自动读取当前页面的岗位信息，识别需要填写的字段并匹配你的资料；
-            能对应到资料的字段会在识别完成后直接填写，无法匹配或不支持的字段留给人工处理。
-          </p>
-          {needsProfile && (
-            <div className="hero-cta">
-              <div className="hero-cta-title">还没有可以填写的资料</div>
-              <p className="hero-cta-desc">
-                识别能读出这个页面要填什么，但要把内容填进去得先有你的简历。
-                粘贴简历文本即可，<strong>完全离线解析，不联网、不上传</strong>。
-              </p>
-              <button type="button" className="primary" onClick={() => setTab("profile")}>
-                导入我的简历
+          <h2 className="hero-title">填写当前网申</h2>
+          <p className="hero-desc">识别表单，选资料库，一次填入。</p>
+          <button type="button" className="hero-btn" onClick={() => void handleRecognize()}>开始识别</button>
+          {needsProfile && <button type="button" className="link-btn" onClick={() => setTab("profile")}>导入简历</button>}
+        </section>
+      )}
+      {phase === "recognizing" && <Stepper steps={steps} />}
+      {phase === "selecting" && (
+        <section className="library-choice" aria-labelledby="library-choice-title">
+          <div className="choice-heading">
+            <h2 id="library-choice-title">选择资料库</h2>
+            <span>{scanRef.current?.fields.length} 个字段</span>
+          </div>
+          <p className="choice-note">选后自动填写，并覆盖网页已有内容。</p>
+          <div className="library-options">
+            {libraries.map((library) => (
+              <button type="button" className="library-option" key={library.id} onClick={() => void handleChooseLibrary(library.id)}>
+                <span>{library.name}</span><span aria-hidden="true">→</span>
               </button>
-            </div>
-          )}
-          <button
-            type="button"
-            className={needsProfile ? "hero-btn ghost" : "hero-btn"}
-            onClick={() => void handleRecognize()}
-            disabled={!profile}
-          >
-            开始识别
-          </button>
-          <div className="hero-foot">
-            <span className="muted small">扫描不会修改网页内容 · 扩展永远不会点击提交</span>
+            ))}
+          </div>
+          <div className="summary-actions">
+            <button type="button" className="btn-sm" onClick={() => void handleRecognize()}>重新识别</button>
+            <button type="button" className="link-btn" onClick={() => { scanRef.current = null; setPhase("idle"); }}>取消</button>
           </div>
         </section>
       )}
-
-      {phase !== "idle" && (
+      {(phase === "ready" || phase === "filling" || phase === "done") && (
         <>
-          <JobCard
-            activeJob={activeJob}
-            routing={routing}
-            effectiveType={effectiveType}
-            profileOverride={profileOverride}
-            history={jobHistory}
-            libraries={libraries}
-            activeLibraryId={activeLibraryId}
-            onSwitchLibrary={(id) => void switchLibrary(id)}
-            onSelect={(id) => void handleSelectJob(id)}
-            onClear={() => void handleClearJob()}
-            onOverrideProfile={(t) => void handleOverrideProfile(t)}
-            onManualSelect={(t) => void handleManualSelect(t)}
-          />
-
-          {coverage && coverage.totalExperiences > 0 && effectiveType !== "general" && (
-            <p className="hint">
-              {profileTypeLabel(effectiveType)}专属表达：{coverage.completedVariants} / {coverage.totalExperiences} 条经历已配置
-              {coverage.completedVariants < coverage.totalExperiences ? "（未配置的会退回默认表达）" : ""}
-              {coverage.completedVariants < coverage.totalExperiences && (
-                <button type="button" className="link-btn" onClick={() => setTab("profile")}>
-                  去补写
-                </button>
-              )}
-            </p>
-          )}
-
-          <Stepper steps={steps} collapsed={phase === "done" || phase === "ready"} />
-
-          {(phase === "ready" || phase === "filling" || phase === "done") && (
-            <>
-              <section className="summary">
-                <div className="summary-grid">
-                  <div className="summary-cell">
-                    <div className="summary-num num-ok">
-                      {phase === "done" ? filledList.length : safeCount}
-                    </div>
-                    <div className="summary-label">{phase === "done" ? "已填写" : "可直接填写"}</div>
-                  </div>
-                  <div className="summary-cell">
-                    <div className="summary-num num-review">{anyPending}</div>
-                    <div className="summary-label">待你确认</div>
-                  </div>
-                  <div className="summary-cell">
-                    <div className="summary-num num-manual">{manualList.length + noContentList.length}</div>
-                    <div className="summary-label">需人工处理</div>
-                  </div>
-                  {failedList.length > 0 && (
-                    <div className="summary-cell">
-                      <div className="summary-num num-manual">{failedList.length}</div>
-                      <div className="summary-label">填写失败</div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="summary-actions">
-                  {/* 重识别 / 撤销是「出问题时才用」的次要动作：降成文字链，让主操作只有一个 */}
-                  <button type="button" className="link-btn" onClick={() => void handleRecognize()} disabled={phase === "filling"}>
-                    重新识别
-                  </button>
-                  {originals.length > 0 && (
-                    <button type="button" className="link-btn" onClick={() => void handleUndo()}>
-                      撤销本次填写
-                    </button>
-                  )}
-                  <span className="spacer" />
-                  {phase === "ready" && !previewRevealed && candidates.length > 0 ? (
-                    /* 没有自动匹配字段时，仍可打开预览查看识别结果 */
-                    <button type="button" className="primary" onClick={() => setPreviewRevealed(true)}>
-                      查看填写预览
-                    </button>
-                  ) : (
-                    <>
-                      {(() => {
-                        /* 批量确认只覆盖「证据够」的那批：低置信项必须一项一点头，
-                           不然这个按钮就把本轮刚装的「低置信不静默填」又绕回去了。 */
-                        const bulk = candidates.filter((c) => isConfirmable(c) && !c.confirmed).length;
-                        if (bulk === 0) return null;
-                        return (
-                          <button type="button" className="btn-sm" onClick={confirmAllConfirmable}>
-                            全部确认可直接填的（{bulk}）
-                          </button>
-                        );
-                      })()}
-                      {(phase === "done" || candidates.length === 0) && pendingToFill.length === 0 ? (
-                        /* 填完之后的主操作必须是「下一步」，不是一个灰掉的「没有可填写的项」 */
-                        <button type="button" className="primary" onClick={() => setTab("jobs")}>
-                          投递下一个岗位
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="primary"
-                          disabled={pendingToFill.length === 0 || phase === "filling"}
-                          onClick={() => {
-                            setConfirmTargets(pendingToFill);
-                            setShowConfirm(true);
-                          }}
-                        >
-                          {confirmable.length > 0
-                            ? `填写确认的 ${confirmable.length} 项`
-                            : pendingToFill.length > 0
-                              ? `确认并填写 ${pendingToFill.length} 项`
-                              : "没有可填写的项"}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </section>
-
-              {prefs.showDev && url && (
-                <div className="url-line">
-                  当前页面：<a href={url} target="_blank" rel="noreferrer">{url}</a>
-                </div>
-              )}
-
-              {(() => {
-                /* 空状态的出路：识别到了字段但资料库里没有内容时，光说「暂无可填项」等于把问题丢回给用户。
-                   这里列出**具体缺哪几栏**并给一个跳转 —— 缺的是客观资料，补一次以后每次投递都能用。 */
-                const missing = candidates.filter((c) => c.status === "empty" && isCanonicalFieldId(c.match.fieldId));
-                if (missing.length === 0) return null;
-                const names = Array.from(new Set(missing.map((c) => fieldFullLabel(c.match.fieldId))));
-                return (
-                  <div className="banner banner-review" data-missing-count={missing.length}>
-                    这个页面有 {missing.length} 栏你资料库里还没有内容：{names.slice(0, 6).join("、")}
-                    {names.length > 6 ? ` 等 ${names.length} 项` : ""}。
-                    <button type="button" className="btn-sm" onClick={() => setTab("profile")}>
-                      去补这几项
-                    </button>
-                  </div>
-                );
-              })()}
-
-              {previewRevealed && (
-                <FieldList
-                candidates={candidates}
-                devMode={prefs.showDev}
-                onToggleConfirm={toggleConfirm}
-                onEditValue={editValue}
-                onIgnore={ignore}
-                onUnignore={unignore}
-                onSwitchField={switchMatchedField}
-                onConfirmLowConfidence={confirmLowConfidence}
-                onBlockOnSite={(r) => void blockOnSite(r)}
-                onUndoSiteRule={(id) => void undoSiteRule(id)}
-                siteHost={siteHost ?? undefined}
-                onLocate={(r) => void locate(r)}
-                onGenerateAnswer={(r) => void handleGenerateAnswer(r)}
-                onRevalidateAnswer={(r) => void handleRevalidateAnswer(r)}
-                />
-              )}
-
-              {phase === "done" && (
-                <FillReceipt
-                  candidates={candidates}
-                  onLocate={(r) => void locate(r)}
-                  onUnignore={unignore}
-                  onConfirmLowConfidence={confirmLowConfidence}
-                  onUndoSiteRule={(id) => void undoSiteRule(id)}
-                />
-              )}
-            </>
-          )}
+          <section className="fill-overview" aria-live="polite">
+            <div className="choice-heading">
+              <h2>{phase === "filling" ? "正在填写…" : unfilledCount > 0 ? "部分已填写" : "填写完成"}</h2>
+              <span>{usedLibraryName}</span>
+            </div>
+            <div className="fill-counts">
+              <span className="count-filled">已填写 <strong>{filledList.length}</strong></span>
+              <span className="count-unfilled">未填写 <strong>{unfilledCount}</strong></span>
+            </div>
+            <div className="summary-actions">
+              <button type="button" className="btn-sm" onClick={() => void handleRecognize()} disabled={busy}>重新识别</button>
+              {originals.length > 0 && <button type="button" className="btn-sm" onClick={() => void handleUndo()} disabled={busy}>撤销填写</button>}
+              {pendingToFill.length > 0 && <button type="button" className="primary" disabled={busy} onClick={() => { setConfirmTargets(pendingToFill.map((c) => ({ ...c, confirmed: true }))); setShowConfirm(true); }}>填写 {pendingToFill.length} 项</button>}
+            </div>
+          </section>
+          {previewRevealed && <fieldset className="field-controls" disabled={busy}><FieldList
+            candidates={candidates} devMode={prefs.showDev}
+            onToggleConfirm={toggleConfirm} onEditValue={editValue} onIgnore={ignore} onUnignore={unignore}
+            onSwitchField={switchMatchedField} onConfirmLowConfidence={confirmLowConfidence}
+            onBlockOnSite={(r) => void blockOnSite(r)} onUndoSiteRule={(id) => void undoSiteRule(id)}
+            siteHost={siteHost ?? undefined} onLocate={(r) => void locate(r)}
+            onGenerateAnswer={(r) => void handleGenerateAnswer(r)} onRevalidateAnswer={(r) => void handleRevalidateAnswer(r)}
+          /></fieldset>}
         </>
       )}
     </main>
@@ -1512,12 +955,6 @@ export default function App() {
     <JobWorkspace
       jobId={detailJobId}
       onBack={() => setDetailJobId(null)}
-      onStartApplication={async (jobId) => {
-        await setWsActiveJob(jobId);
-        await refreshJobs();
-        setDetailJobId(null);
-        setTab("apply");
-      }}
       onChanged={() => setInboxRefresh((n) => n + 1)}
     />
   ) : (
@@ -1536,8 +973,6 @@ export default function App() {
       profile={profile}
       onPersist={persist}
       onBack={() => setTab("apply")}
-      activeJob={activeJob}
-      effectiveType={effectiveType}
       libraries={libraries}
       activeLibraryId={activeLibraryId}
       onSwitchLibrary={(id) => void switchLibrary(id)}
@@ -1551,40 +986,9 @@ export default function App() {
   const settingsView = (
     <main className="main">
       <section className="card">
-        <h3 className="card-title">填写行为</h3>
-        <p className="hint">
-          识别完成后，资料库里已有内容、而且识别证据足够的字段会直接写入页面，<strong>不需要逐项确认</strong>；
-          把握不足（低置信）的那几项<strong>不会静默填写</strong>，会在清单里列出依据等你点头；
-          资料库里没有的字段保持空着由你补。承诺 / 声明 / 签名 / 是否调剂这类保证性控件不会代填，
-          插件也永远不点提交。误填时可用「撤销本次填写」恢复。
-        </p>
-        <label className="switch">
-          <input
-            type="checkbox"
-            checked={prefs.autoFill}
-            onChange={(e) => updatePrefs({ autoFill: e.target.checked })}
-          />
-          <span>识别完成后直接填写（推荐）</span>
-        </label>
-        <label className="switch">
-          <input
-            type="checkbox"
-            checked={prefs.autoCaptureJob}
-            onChange={(e) => updatePrefs({ autoCaptureJob: e.target.checked })}
-          />
-          <span>识别时自动读取当前页面的岗位 JD</span>
-        </label>
-      </section>
-
-      <section className="card">
         <h3 className="card-title">站点设定（{siteMemory.rules.length} 条）</h3>
-        <p className="hint">
-          你在某个招聘站上点过的「这一栏其实是……」和「这一站以后都别填这一项」会记在这里，下次识别直接生效。
-          这里只存<strong>站点自己写的栏名</strong>和你的判断，不存你的资料内容，也不存任何登录凭据；
-          换一台浏览器或清掉本机数据就会重新开始。
-        </p>
         {siteMemory.rules.length === 0 ? (
-          <p className="muted small">还没有站点设定。在识别清单里点「这一站以后都别填」或「改用这一项」就会新增一条。</p>
+          <p className="muted small">暂无设定</p>
         ) : (
           <ul className="site-rule-list">
             {siteMemory.rules.map((r) => (
@@ -1602,12 +1006,12 @@ export default function App() {
       <section className="card">
         <h3 className="card-title">本机存储</h3>
         {!storageUsage || !storageUsage.available ? (
-          <p className="muted small">读不到存储用量（这里显示的是真实读数，不拿 0 冒充「没占用」）。</p>
+          <p className="muted small">无法读取存储用量</p>
         ) : (
           <>
             <p className="hint" data-storage-ratio={storageUsage.ratio.toFixed(3)}>
               已用 {formatBytes(storageUsage.totalBytes)} / {formatBytes(storageUsage.quotaBytes)}（
-              {(storageUsage.ratio * 100).toFixed(1)}%）。全部只存在这台浏览器的本地，扩展不上传任何东西。
+              {(storageUsage.ratio * 100).toFixed(1)}%）。
               {storageUsage.warn && (
                 <strong className="meta-warn"> 空间接近上限：保存可能失败，请清理岗位记录或在「资料」页导出后留底。</strong>
               )}
@@ -1625,11 +1029,7 @@ export default function App() {
       </section>
 
       <section className="card">
-        <h3 className="card-title">AI 模型（生成岗位方向表达与开放题回答）</h3>
-        <p className="muted small">
-          默认「离线（不联网）」：开放题的回答由你资料库里的条目拼装。
-          选 DeepSeek 或 OpenAI 兼容并填入 Base URL + Key 之后才会调用模型；Key 只存这台机器。
-        </p>
+        <h3 className="card-title">AI 模型</h3>
         <ProviderSettingsForm />
       </section>
 

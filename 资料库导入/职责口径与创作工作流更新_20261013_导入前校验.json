@@ -1,0 +1,53 @@
+{
+  "ok": true,
+  "sharedAndActiveLibraryPreserved": true,
+  "changes": [
+    "青天特克技术科普视频与SEO/GEO图文分工",
+    "不声称对接客户或客户选型需求",
+    "收录率统一75%+",
+    "蔡同水务宣传主题策划与服务科普",
+    "MiniMax云部署配合ComfyUI生成视频"
+  ],
+  "libraries": [
+    {
+      "track": "default",
+      "name": "默认资料库",
+      "internships": 3,
+      "projects": 10,
+      "campus": 1,
+      "skillsCharacters": 989,
+      "qingDescriptionCharacters": 647,
+      "waterDescriptionCharacters": 473
+    },
+    {
+      "track": "app",
+      "name": "AI 应用｜业务自动化｜解决方案",
+      "internships": 3,
+      "projects": 4,
+      "campus": 1,
+      "skillsCharacters": 730,
+      "qingDescriptionCharacters": 668,
+      "waterDescriptionCharacters": 476
+    },
+    {
+      "track": "aigc",
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "internships": 3,
+      "projects": 4,
+      "campus": 1,
+      "skillsCharacters": 688,
+      "qingDescriptionCharacters": 633,
+      "waterDescriptionCharacters": 481
+    },
+    {
+      "track": "ops",
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "internships": 3,
+      "projects": 5,
+      "campus": 1,
+      "skillsCharacters": 700,
+      "qingDescriptionCharacters": 647,
+      "waterDescriptionCharacters": 473
+    }
+  ]
+}

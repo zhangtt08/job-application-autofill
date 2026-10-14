@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "storageReadback": true,
+  "sharedPreserved": true,
+  "activeLibraryPreserved": true,
+  "libraries": [
+    {
+      "id": "lib_muwnihzl_f2wjsle6",
+      "name": "默认资料库",
+      "projects": 10,
+      "internships": 3,
+      "campus": 1,
+      "skillsCharacters": 976
+    },
+    {
+      "id": "ztt_app_20261006",
+      "name": "AI 应用｜业务自动化｜解决方案",
+      "projects": 4,
+      "internships": 3,
+      "campus": 1,
+      "skillsCharacters": 651
+    },
+    {
+      "id": "ztt_aigc_20261006",
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "projects": 4,
+      "internships": 3,
+      "campus": 1,
+      "skillsCharacters": 565
+    },
+    {
+      "id": "ztt_ops_20261006",
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "projects": 5,
+      "internships": 3,
+      "campus": 1,
+      "skillsCharacters": 704
+    }
+  ],
+  "backup": "导入前原资料库_2026-10-11T14-43-12-105Z.json"
+}

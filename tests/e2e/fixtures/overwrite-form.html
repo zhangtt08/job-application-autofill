@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>合成公司 · 产品实习申请</title>
+<style>body{font:16px system-ui;max-width:700px;margin:40px auto}label{display:block;margin:14px 0}input,textarea{display:block;padding:8px;width:90%}input[type=checkbox]{display:inline;width:auto}fieldset,.entry{padding:14px;margin:16px 0;border:1px solid #ddd}textarea{height:70px}</style>
+<form id="application"><h1>网申表单</h1><section><h2>个人信息</h2>
+<label>姓名<input id="name" value="简历导入旧姓名"></label>
+<label>电子邮箱<input id="email" type="email" value="old@example.invalid"></label>
+<label>微信<input id="wechat" value="保留网站微信"></label>
+</section><section><h2>实习经历</h2>
+<div class="entry"><label>公司<input class="company" value="旧公司一"></label><label>岗位<input class="position" value="旧岗位一"></label><label>实习描述<textarea class="description">旧描述一</textarea></label></div>
+<div class="entry"><label>公司<input class="company" value="旧公司二"></label></div>
+<div class="entry"><label>公司<input class="company" value="旧公司三"></label><label>岗位<input class="position" value="旧岗位三"></label><label>实习描述<textarea class="description">旧描述三</textarea></label></div>
+</section><fieldset><legend>语言能力</legend>
+<label><input type="checkbox" name="language" value="cet4" checked>英语CET-4</label>
+<label><input type="checkbox" name="language" value="cet6">英语CET-6</label>
+</fieldset><label>本人承诺<input id="promise" value="保留声明"></label><button type="submit">提交申请</button></form>
+<script>window.submitCount=0;document.querySelector('form').addEventListener('submit',e=>{e.preventDefault();window.submitCount++});</script>
+</html>

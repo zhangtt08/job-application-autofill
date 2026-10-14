@@ -76,6 +76,8 @@ export interface RawFieldContext {  labelText: string;
   disabled: boolean;
   readOnly: boolean;
   currentValue: string;
+  /** 同一条教育/经历表单块的结构标识，用于按块分配资料。 */
+  entryGroup?: string;
   /** 由近及远的祖先结构信号（≤5 层）；缺失 = 老数据或未采集，语境判定按 unknown 保守处理 */
   ancestorSignals?: ContextAncestorSignal[];
   /** 同近邻容器内其他控件的 label/placeholder（≤10 条，每条 ≤24 字）——「典型申请字段共现」信号 */
@@ -232,4 +234,9 @@ export interface FillOutcome {
   detail?: string;
   /** 跨 frame 分发时由 Background 回填，用于把结果对回正确的字段卡 */
   frameId?: number;
+}
+
+/** iframe 内可有同名同结构的字段；界面操作与结果定位必须同时带上 frame。 */
+export function rawFieldKey(raw: Pick<RawField, "reference" | "frameId">): string {
+  return `${raw.frameId ?? 0}|${raw.reference}`;
 }

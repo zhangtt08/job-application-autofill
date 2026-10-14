@@ -1,0 +1,29 @@
+{
+  "ok": true,
+  "changes": [
+    {
+      "id": "lib_muwnihzl_f2wjsle6",
+      "name": "默认资料库",
+      "fields": [
+        "个人品牌网站与 SEO / GEO 运营实践.description",
+        "个人品牌网站与 SEO / GEO 运营实践.workContent",
+        "个人品牌网站与 SEO / GEO 运营实践.achievements",
+        "个人品牌网站与 SEO / GEO 运营实践.summary",
+        "content.personalAdvantages",
+        "content.selfIntroduction"
+      ]
+    },
+    {
+      "id": "ztt_ops_20261006",
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "fields": [
+        "个人品牌网站与 SEO / GEO 运营实践.description",
+        "个人品牌网站与 SEO / GEO 运营实践.workContent",
+        "个人品牌网站与 SEO / GEO 运营实践.achievements",
+        "个人品牌网站与 SEO / GEO 运营实践.summary",
+        "content.personalAdvantages",
+        "content.selfIntroduction"
+      ]
+    }
+  ]
+}

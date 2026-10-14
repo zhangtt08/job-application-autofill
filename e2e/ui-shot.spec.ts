@@ -7,6 +7,7 @@ import { test, expect } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import {
   FIXTURE_BASE,
+  chooseLibraryAndFill,
   resetJobStorage,
   setupProfile,
   launchWithExtension,
@@ -28,7 +29,7 @@ test("UI-SHOT: 识别 → 回执 → 匹配依据", async () => {
   await page.bringToFront();
 
   await sidePanel.getByRole("button", { name: /开始识别|重新识别/ }).click();
-  await sidePanel.getByText(/填写完成 ——/).waitFor({ timeout: 60_000 });
+  await chooseLibraryAndFill(sidePanel);
   await ensureFilled(sidePanel).catch(() => {});
   await page.waitForTimeout(800);
 
@@ -42,6 +43,6 @@ test("UI-SHOT: 识别 → 回执 → 匹配依据", async () => {
   }
   await sidePanel.screenshot({ path: "test-results/ui-shots/02-why.png", fullPage: true });
 
-  await expect(sidePanel.getByText(/填写完成 ——/)).toBeVisible();
+  await expect(sidePanel.locator(".fill-overview h2")).toBeVisible();
   await context.close();
 });

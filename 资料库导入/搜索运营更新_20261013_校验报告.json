@@ -1,0 +1,42 @@
+{
+  "ok": true,
+  "storageReadback": true,
+  "sharedPreserved": true,
+  "activeLibraryPreserved": true,
+  "projectsAndCampusPreserved": true,
+  "originalBackupFile": "导入前原资料库_2026-10-12T17-04-32-486Z.json",
+  "libraries": [
+    {
+      "track": "default",
+      "name": "默认资料库",
+      "internships": 3,
+      "projects": 10,
+      "campus": 1,
+      "skillsCharacters": 984
+    },
+    {
+      "track": "app",
+      "name": "AI 应用｜业务自动化｜解决方案",
+      "internships": 3,
+      "projects": 4,
+      "campus": 1,
+      "skillsCharacters": 730
+    },
+    {
+      "track": "aigc",
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "internships": 3,
+      "projects": 4,
+      "campus": 1,
+      "skillsCharacters": 683
+    },
+    {
+      "track": "ops",
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "internships": 3,
+      "projects": 5,
+      "campus": 1,
+      "skillsCharacters": 700
+    }
+  ]
+}

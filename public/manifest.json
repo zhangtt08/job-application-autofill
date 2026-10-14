@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Application Form Assistant",
   "version": "0.1.0",
-  "description": "网申自动填写助手：识别岗位 → 识别字段 → 按资料库一键填写。不逐项确认，但绝不自动提交。",
+  "description": "网申助手：识别表单 → 选择资料库 → 覆盖填写。",
   "minimum_chrome_version": "114",
   "permissions": ["storage", "sidePanel", "activeTab", "scripting", "webNavigation"],
   "host_permissions": ["http://*/*", "https://*/*"],

@@ -95,7 +95,7 @@ export function LibraryPicker(props: LibraryPickerProps) {
       {!compact && (
         <div className="libbar-head">
           <span className="libbar-title">资料库</span>
-          <span className="muted small">共 {libraries.length} 个 · 识别后会按岗位方向自动选</span>
+          <span className="muted small">{libraries.length} 个</span>
         </div>
       )}
 
@@ -191,7 +191,7 @@ export function LibraryPicker(props: LibraryPickerProps) {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </label>
-          <div className="libbar-form-label">适用方向（可多选；不选=通用兜底）</div>
+          <div className="libbar-form-label">分类</div>
           <DirectionChips value={form.directions} onChange={(next) => setForm({ ...form, directions: next })} />
           {form.mode === "create" && (
             <label className="switch">
@@ -217,11 +217,6 @@ export function LibraryPicker(props: LibraryPickerProps) {
         </div>
       )}
 
-      {compact && (
-        <p className="muted small">
-          识别时会按岗位方向自动切到对应资料库；库太多管不过来时，到「资料」页可以新建 / 复制 / 删除。
-        </p>
-      )}
     </section>
   );
 }

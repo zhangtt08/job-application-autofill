@@ -32,8 +32,15 @@ async function main(){
  const oldName=original[keys[0]]?.shared?.basic?.name||original[keys[1]]?.basic?.name;
  if(oldName&&oldName!=='张天腾')throw Error('现有资料库姓名不同，未覆盖');
  await send('backup',{extensionId:chrome.runtime.id,original});
- const backupKey=`afa.profiles.backup.ztt.${Date.now()}`;
- await chrome.storage.local.set({[backupKey]:{createdAt:new Date().toISOString(),original}});
+ let backupKey=`afa.profiles.backup.ztt.${Date.now()}`;
+ let backupStorage='extension-and-file';
+ try{
+   await chrome.storage.local.set({[backupKey]:{createdAt:new Date().toISOString(),original}});
+ }catch(error){
+   // A verified disk backup already exists; do not delete old browser backups to free quota.
+   if(!/quota/i.test(String(error)))throw error;
+   backupKey=null;backupStorage='file';
+ }
  const first=split(pack.libraries[0].profile);
  let store=original[keys[0]];
  if(store&&(!Array.isArray(store.libraries)||!store.shared))throw Error('原 v2 资料库结构异常；已备份，未覆盖');
@@ -63,7 +70,7 @@ async function main(){
  await chrome.storage.local.set({[keys[0]]:store,[keys[1]]:mirror});
  const back=await chrome.storage.local.get(keys);
  if(stable(back[keys[0]])!==stable(store)||stable(back[keys[1]])!==stable(mirror))throw Error('保存后读回不一致');
- const receipt={ok:true,extensionId:chrome.runtime.id,backupKey,verifiedAt:now,store:back[keys[0]],mirror:back[keys[1]],importedIds:pack.libraries.map(l=>l.id)};
+ const receipt={ok:true,extensionId:chrome.runtime.id,backupKey,backupStorage,verifiedAt:now,store:back[keys[0]],mirror:back[keys[1]],importedIds:pack.libraries.map(l=>l.id)};
  await send('receipt',receipt);
  status.textContent='导入成功：已保存并读回验证，原资料库已备份。';
  result.textContent=pack.libraries.map(l=>`${l.name}\n项目 ${l.profile.projects.length} 条｜实习 ${l.profile.internships.length} 条｜校园 ${l.profile.campus.length} 条`).join('\n\n')+'\n\n返回插件“资料”页即可选择岗位库。';

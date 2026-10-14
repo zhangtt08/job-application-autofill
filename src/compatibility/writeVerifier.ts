@@ -117,10 +117,18 @@ export async function fillWithVerification(
   let actual = "";
   let detail: string | undefined;
   for (let i = 0; i < maxAttempts; i++) {
+    if (!el.isConnected) return { status: "mismatch", requestedValue, actualValue: "", strategy, attempts: i, detail: "页面重建了字段，请重新识别" };
     const res = await applyStrategy(el, requestedValue, strategy);
     detail = res.detail;
     // 策略内部已按各自的回显语义等过；这里再给框架一次统一的重绘窗口
-    const settled = await waitFor(() => valueMatchesRequested(el, requestedValue), 350, 50);
+    let stableSince = Date.now();
+    const settled = await waitFor(() => {
+      if (!el.isConnected || !valueMatchesRequested(el, requestedValue)) {
+        stableSince = Date.now();
+        return false;
+      }
+      return Date.now() - stableSince >= 100;
+    }, 350, 50);
     if (settled) {
       return { status: "success", requestedValue, actualValue: readDisplayValue(el), strategy, attempts: i + 1 };
     }

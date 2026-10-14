@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "liveStorageReadback": true,
+  "identityDatesCountsPreferencesPreserved": true,
+  "backup": "导入前原资料库_2026-10-13T16-55-20-932Z.json",
+  "libraries": [
+    {
+      "name": "默认资料库",
+      "internships": 3,
+      "projects": 10,
+      "campus": 1,
+      "allCharacters": 61047,
+      "experienceDescriptionCharacters": 6289,
+      "technicalItems": 11,
+      "toolGroups": 8,
+      "technicalCharacters": 823
+    },
+    {
+      "name": "AI 应用｜业务自动化｜解决方案",
+      "internships": 3,
+      "projects": 4,
+      "campus": 1,
+      "allCharacters": 37099,
+      "experienceDescriptionCharacters": 3734,
+      "technicalItems": 8,
+      "toolGroups": 4,
+      "technicalCharacters": 604
+    },
+    {
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "internships": 3,
+      "projects": 4,
+      "campus": 1,
+      "allCharacters": 31963,
+      "experienceDescriptionCharacters": 3142,
+      "technicalItems": 6,
+      "toolGroups": 6,
+      "technicalCharacters": 373
+    },
+    {
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "internships": 3,
+      "projects": 5,
+      "campus": 1,
+      "allCharacters": 40791,
+      "experienceDescriptionCharacters": 4120,
+      "technicalItems": 8,
+      "toolGroups": 5,
+      "technicalCharacters": 564
+    }
+  ]
+}

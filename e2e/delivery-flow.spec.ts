@@ -1,6 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   FIXTURE_BASE,
+  chooseLibraryAndFill,
+  revealPreview,
   setupProfile,
   resetJobStorage,
   launchWithExtension,
@@ -92,12 +94,12 @@ async function readValues(page: Page): Promise<Record<string, string>> {
   return out;
 }
 
-test("一键流程：识别即按资料库填写，值落在正确的控件里", async () => {
+test("选库后按资料库填写，值落在正确的控件里", async () => {
   test.setTimeout(180_000);
   const page = await openModernAts();
 
   await sidePanel.getByRole("button", { name: /开始识别|重新识别/ }).click();
-  await sidePanel.getByText(/填写完成 ——/).waitFor({ timeout: 60_000 });
+  await chooseLibraryAndFill(sidePanel);
 
   const v = await readValues(page);
 
@@ -168,7 +170,7 @@ test("跨域 iframe 表单：识别得到，也填得进去", async () => {
   const page = await openModernAts();
 
   await sidePanel.getByRole("button", { name: /开始识别|重新识别/ }).click();
-  await sidePanel.getByText(/填写完成 ——/).waitFor({ timeout: 60_000 });
+  await chooseLibraryAndFill(sidePanel);
 
   const v = await readValues(page);
   expect(v.__frameFound).toBe("yes");
@@ -183,8 +185,9 @@ test("字段卡片显示写入结果，失败项给出可读原因", async () =>
   test.setTimeout(180_000);
   const page = await openModernAts();
   await sidePanel.getByRole("button", { name: /开始识别|重新识别/ }).click();
-  await sidePanel.getByText(/填写完成 ——/).waitFor({ timeout: 60_000 });
+  await chooseLibraryAndFill(sidePanel);
 
+  await revealPreview(sidePanel);
   const filled = sidePanel.locator('.field-card[data-status="filled"]');
   expect(await filled.count()).toBeGreaterThan(5);
 
@@ -199,9 +202,9 @@ test("撤销：填写过的控件全部恢复为空", async () => {
   test.setTimeout(180_000);
   const page = await openModernAts();
   await sidePanel.getByRole("button", { name: /开始识别|重新识别/ }).click();
-  await sidePanel.getByText(/填写完成 ——/).waitFor({ timeout: 60_000 });
+  await chooseLibraryAndFill(sidePanel);
 
-  await sidePanel.getByRole("button", { name: /撤销本次填写/ }).click();
+  await sidePanel.getByRole("button", { name: /撤销填写/ }).click();
   await sidePanel.getByText(/已撤销本次填写/).waitFor({ timeout: 30_000 });
 
   expect(await page.locator("#f-name").inputValue()).toBe("");
@@ -216,7 +219,7 @@ test("英文 ATS（Greenhouse / Lever 形态）：姓名拆分与英文标签一
   await page.bringToFront();
 
   await sidePanel.getByRole("button", { name: /开始识别|重新识别/ }).click();
-  await sidePanel.getByText(/填写完成 ——/).waitFor({ timeout: 60_000 });
+  await chooseLibraryAndFill(sidePanel);
 
   // 英文站把姓名拆成 First / Last：资料库里「张 / 三」两段要各归各位
   expect(await page.locator("#first-name").inputValue()).toBe("三");

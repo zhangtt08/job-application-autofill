@@ -192,6 +192,27 @@ describe("Write Verification", () => {
     expect(el.value).toBe("锁定值");
   });
 
+  it("页面下一帧回滚值时，不把瞬间回显当作成功", async () => {
+    const el = makeInput({ value: "导入旧值" });
+    el.addEventListener("input", () => setTimeout(() => { el.value = "导入旧值"; }, 40));
+    const result = await fillWithVerification(el, "资料库新值", "导入旧值");
+    expect(result.status).not.toBe("success");
+    expect(result.attempts).toBe(2);
+    expect(el.value).toBe("导入旧值");
+  });
+
+  it("受控页面重建节点后，脱离网页的旧节点不能报填写成功", async () => {
+    const el = makeInput({ value: "原值" });
+    el.addEventListener("input", () => {
+      const replacement = document.createElement("input");
+      replacement.value = "原值";
+      el.replaceWith(replacement);
+    });
+    const result = await fillWithVerification(el, "新值", "原值");
+    expect(result.status).not.toBe("success");
+    expect((document.querySelector("input") as HTMLInputElement).value).toBe("原值");
+  });
+
   it("radio 控件可由资料值选择，hidden 仍 unsupported", async () => {
     const radio = document.createElement("input");
     radio.type = "radio";

@@ -1,106 +1,73 @@
 import { useEffect, useState } from "react";
-import { filterInbox, listJobs } from "../../workspace/jobRepository";
-import type { JobRecord } from "../../workspace/types";
-import { JOB_STATUS_LABELS, JOB_NEXT_STEP, INBOX_VIEW_FILTER, type InboxView } from "../../workspace/types";
-import { profileTypeLabel } from "../../job/profileTypes";
+import { deleteJobCascade, filterInbox, listJobs } from "../../workspace/jobRepository";
+import { deleteEventsByJob, deleteSessionsByJob, loadSessionsPublic } from "../../workspace/workspaceRepository";
+import { JOB_STATUS_LABELS, type ApplicationSessionV2, type JobRecord } from "../../workspace/types";
 
-const VIEWS: { key: InboxView; label: string }[] = [
-  { key: "all", label: "全部" },
-  { key: "pending", label: "待处理" },
-  { key: "applying", label: "正在申请" },
-  { key: "submitted", label: "已投递" },
-  { key: "followup", label: "后续流程" },
-  { key: "closed", label: "已结束" },
-];
-
-function relTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const diff = Date.now() - d.getTime();
-  if (diff < 60_000) return "刚刚";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
-  if (diff < 86_400_000) return `今天 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-/** Job Inbox（spec Stage 5 第五~七章）：列表 + 搜索 + 状态筛选 + 归档 + 统计 */
-export function JobInbox(p: {
-  onOpenJob: (jobId: string) => void;
-  refreshKey: number;
-}) {
+export function JobInbox(p: { onOpenJob: (jobId: string) => void; refreshKey: number }) {
   const [jobs, setJobs] = useState<JobRecord[]>([]);
-  const [view, setView] = useState<InboxView>("all");
+  const [sessions, setSessions] = useState<ApplicationSessionV2[]>([]);
   const [search, setSearch] = useState("");
-  const [includeArchived, setIncludeArchived] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    void listJobs().then(setJobs);
+    void Promise.all([listJobs(), loadSessionsPublic()]).then(([records, history]) => {
+      setJobs(records);
+      setSessions(history);
+    }).catch(() => setError("无法读取记录，请重试。"));
   }, [p.refreshKey]);
 
-  const filtered = filterInbox(jobs, { view, search, includeArchived });
-  const stats = {
-    total: jobs.filter((j) => !j.archived).length,
-    pending: jobs.filter((j) => INBOX_VIEW_FILTER.pending.includes(j.status)).length,
-    applying: jobs.filter((j) => INBOX_VIEW_FILTER.applying.includes(j.status)).length,
-    submitted: jobs.filter((j) => INBOX_VIEW_FILTER.submitted.includes(j.status)).length,
-    followup: jobs.filter((j) => INBOX_VIEW_FILTER.followup.includes(j.status)).length,
+  const remove = async (id: string) => {
+    if (deleting) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteSessionsByJob(id);
+      await deleteEventsByJob(id);
+      await deleteJobCascade(id);
+      setJobs((prev) => prev.filter((job) => job.id !== id));
+      setSessions((prev) => prev.filter((session) => session.jobId !== id));
+      setConfirmDelete(null);
+    } catch {
+      setError("删除失败，请重试。");
+    } finally {
+      setDeleting(false);
+    }
   };
 
+  const filtered = filterInbox(jobs, { view: "all", search, includeArchived: true });
   return (
     <main className="main inbox">
-      <div className="inbox-stats muted small">
-        岗位 {stats.total} · 待处理 {stats.pending} · 申请中 {stats.applying} · 已投递 {stats.submitted} · 后续流程 {stats.followup}
-      </div>
-
-      <div className="toolbar">
-        <input
-          className="inbox-search"
-          placeholder="搜索公司 / 岗位 / 标签"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-      </div>
-      <div className="toolbar inbox-views">
-        {VIEWS.map((v) => (
-          <button key={v.key} className={view === v.key ? "btn-sm primary" : "btn-sm"} onClick={() => setView(v.key)}>
-            {v.label}
-          </button>
-        ))}
-        <label className="inbox-toggle">
-          <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />
-          显示归档
-        </label>
-      </div>
-
-      {filtered.length === 0 && (
-        <div className="banner">
-          {jobs.length === 0
-            ? "还没有保存的岗位。在招聘网站的职位页打开「投递」页点「开始识别」，识别时会自动把岗位存到这里。"
-            : "这个筛选条件下没有岗位。换个筛选，或把下面的归档开关打开。"}
-        </div>
-      )}
-
+      {error && <div role="alert" className="banner banner-error">{error}</div>}
+      <input className="inbox-search" aria-label="搜索记录" placeholder="搜索公司 / 岗位" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {filtered.length === 0 && <div className="empty-records">{jobs.length ? "没有匹配的记录" : "暂无申请记录"}</div>}
       <div className="inbox-list">
-        {filtered.map((job) => (
-          <button key={job.id} className="job-card" onClick={() => p.onOpenJob(job.id)}>
-            <div className="job-card-head">
-              <span className="job-company">{job.company || "（未填公司）"}</span>
-              <span className={`job-status st-${job.status}`}>{JOB_STATUS_LABELS[job.status]}</span>
-            </div>
-            <div className="job-card-body">
-              <span className="job-position">{job.position || "（未填岗位）"}</span>
-              <span className="muted small">{profileTypeLabel(job.jobType)}</span>
-            </div>
-            <div className="job-card-foot muted small">
-              <span>
-                {relTime(job.updatedAt)}
-                {job.tags.length > 0 && ` · ${job.tags.join(" / ")}`}
-              </span>
-              {/* 卡片整块可点，但看不出来「点了会怎样」——把下一步直接写在行尾 */}
-              <span className="job-card-go">{JOB_NEXT_STEP[job.status]} ›</span>
-            </div>
-          </button>
-        ))}
+        {filtered.map((job) => {
+          const latest = sessions.find((session) => session.jobId === job.id);
+          const fillLabel = latest?.status === "filled" ? "已填写" : latest?.fillPlanSummary ? "部分已填写" : "未填写";
+          return (
+            <article key={job.id} className="record-item">
+              <button type="button" className="record-open" onClick={() => p.onOpenJob(job.id)}>
+                <strong>{job.company ? `${job.company} · ` : ""}{job.position || "申请记录"}</strong>
+                <span className="record-meta">
+                  <span className={latest?.status === "filled" ? "count-filled" : "count-unfilled"}>{fillLabel}</span>
+                  {job.status !== "saved" && <span>{JOB_STATUS_LABELS[job.status]}</span>}
+                  <time>{new Date(job.updatedAt).toLocaleDateString("zh-CN")}</time>
+                </span>
+              </button>
+              {confirmDelete === job.id ? (
+                <div className="record-delete">
+                  <span>同时删除申请记录？</span>
+                  <button type="button" className="btn-sm danger" disabled={deleting} onClick={() => void remove(job.id)}>确认删除</button>
+                  <button type="button" className="btn-sm" disabled={deleting} onClick={() => setConfirmDelete(null)}>取消</button>
+                </div>
+              ) : (
+                <button type="button" className="btn-sm danger" aria-label={`删除 ${job.position}`} onClick={() => setConfirmDelete(job.id)}>删除</button>
+              )}
+            </article>
+          );
+        })}
       </div>
     </main>
   );

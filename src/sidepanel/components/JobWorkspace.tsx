@@ -1,31 +1,14 @@
 import { useEffect, useState } from "react";
-import { getJob, updateJob, setJobStatus, deleteJobCascade, getProfileOverrideV2 } from "../../workspace/jobRepository";
+import { getJob, updateJob, setJobStatus, deleteJobCascade } from "../../workspace/jobRepository";
 import { listSessionsByJob, listEventsByJob, deleteEventsByJob, deleteSessionsByJob } from "../../workspace/workspaceRepository";
 import {
   SESSION_STATUS_LABELS, JOB_STATUS_LABELS,
   type JobRecord, type JobStatus, type ApplicationSessionV2, type ApplicationEvent,
 } from "../../workspace/types";
-import { profileTypeLabel, type ProfileType } from "../../job/profileTypes";
 
 const ALL_STATUSES: JobStatus[] = [
   "saved", "preparing", "applying", "submitted", "assessment", "interview", "offer", "rejected", "withdrawn",
 ];
-
-/**
- * 「开始 / 继续申请」必须把人带到这个岗位的原页：以前只是切到「投递」标签，
- * 如果用户此时看的是别的网页，切过去填的就是另一张表。
- * 已经开着这个页面 → 激活它，不再开一个重复标签。
- */
-async function focusOrOpenJobSource(url: string): Promise<void> {
-  if (!/^https?:\/\//i.test(url)) return;
-  const existing = await chrome.tabs.query({ url });
-  const tabId = existing[0]?.id;
-  if (tabId != null) {
-    await chrome.tabs.update(tabId, { active: true });
-    return;
-  }
-  await chrome.tabs.create({ url });
-}
 
 const EVENT_LABELS: Record<string, string> = {
   JOB_CAPTURED: "捕获岗位",
@@ -50,16 +33,15 @@ function fmtTime(iso: string): string {
 export function JobWorkspace(p: {
   jobId: string;
   onBack: () => void;
-  onStartApplication: (jobId: string) => void;
   onChanged: () => void;
 }) {
   const [job, setJob] = useState<JobRecord | null>(null);
   const [sessions, setSessions] = useState<ApplicationSessionV2[]>([]);
   const [events, setEvents] = useState<ApplicationEvent[]>([]);
-  const [override, setOverride] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [tagsText, setTagsText] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [error, setError] = useState("");
 
   const reload = async () => {
     const j = await getJob(p.jobId);
@@ -70,7 +52,6 @@ export function JobWorkspace(p: {
     }
     setSessions(await listSessionsByJob(p.jobId));
     setEvents(await listEventsByJob(p.jobId));
-    setOverride(await getProfileOverrideV2());
   };
 
   useEffect(() => {
@@ -88,8 +69,8 @@ export function JobWorkspace(p: {
   }
 
   const saveNotes = async () => {
-    if (notes === (job.notes ?? "")) return;
-    await updateJob(job.id, { notes });
+    if (notes === (job.notes ?? "") && tagsText === (job.tags ?? []).join(", ")) return;
+    await updateJob(job.id, { notes, tags: tagsText.split(/[,，]/).map((t) => t.trim()).filter(Boolean) });
     if (notes.trim()) {
       const { appendEvent } = await import("../../workspace/workspaceRepository");
       await appendEvent({ jobId: job.id, type: "NOTE_ADDED", timestamp: new Date().toISOString(), metadata: { preview: notes.slice(0, 30) } });
@@ -123,16 +104,27 @@ export function JobWorkspace(p: {
       setConfirmDelete(true);
       return;
     }
-    await deleteSessionsByJob(job.id);
-    await deleteEventsByJob(job.id);
-    await deleteJobCascade(job.id);
-    p.onChanged();
-    p.onBack();
+    try {
+      await deleteSessionsByJob(job.id);
+      await deleteEventsByJob(job.id);
+      await deleteJobCascade(job.id);
+      p.onChanged();
+      p.onBack();
+    } catch {
+      setError("删除失败，请重试。");
+    }
   };
 
   return (
     <main className="main workspace">
-      <button className="btn-sm" onClick={p.onBack}>← 返回岗位列表</button>
+      <div className="toolbar">
+        <button className="btn-sm" onClick={p.onBack}>返回记录</button>
+        <span className="spacer" />
+        <button className="btn-sm danger" onClick={() => void deleteJob()}>{confirmDelete ? "确认删除记录" : "删除岗位"}</button>
+        {confirmDelete && <button className="btn-sm" onClick={() => setConfirmDelete(false)}>取消</button>}
+      </div>
+      {error && <div role="alert" className="banner banner-error">{error}</div>}
+      {confirmDelete && <div className="banner banner-review">同时删除 {sessions.length} 次申请记录，无法恢复。</div>}
 
       <section className="ws-section">
         <h3>岗位概览</h3>
@@ -162,16 +154,6 @@ export function JobWorkspace(p: {
       </section>
 
       <section className="ws-section">
-        <h3>岗位分析</h3>
-        <div className="ws-grid">
-          <span className="muted small">识别方向</span><span>{profileTypeLabel(job.jobType)}</span>
-          <span className="muted small">填写版本</span>
-          <span>{profileTypeLabel(job.jobType)}{override ? `（手动覆盖：${profileTypeLabel(override as ProfileType)}）` : ""}</span>
-          <span className="muted small">关键词</span><span>{job.keywords.length > 0 ? job.keywords.join(" / ") : "—"}</span>
-        </div>
-      </section>
-
-      <section className="ws-section">
         <h3>申请记录（{sessions.length}）</h3>
         {sessions.length === 0 && <div className="muted small">还没有申请记录。</div>}
         <ul className="ws-list">
@@ -182,19 +164,10 @@ export function JobWorkspace(p: {
             </li>
           ))}
         </ul>
-        <button
-          className="primary"
-          onClick={() => {
-            void focusOrOpenJobSource(job.sourceUrl);
-            void p.onStartApplication(job.id);
-          }}
-        >
-          {sessions.length > 0 ? "开始 / 继续申请" : "开始申请"}
-        </button>
       </section>
 
       <section className="ws-section">
-        <h3>Timeline</h3>
+        <h3>活动记录</h3>
         <ul className="ws-timeline">
           {events.map((e) => (
             <li key={e.id}>
@@ -209,7 +182,7 @@ export function JobWorkspace(p: {
       {/* 备注 / 归档 / 删除都是「维护记录」而不是「推进投递」：折起来，页面主操作只剩一个 */}
       <section className="ws-section">
         <details className="soft-fold ws-more">
-          <summary>更多操作（备注 / 归档 / 删除）</summary>
+          <summary>备注与归档</summary>
           <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="面试信息 / HR 联系 / 岗位备注…" />
           <input value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder="标签，逗号分隔（如：Agent, 杭州, 内推）" />
           <button className="btn-sm" onClick={() => void saveNotes()}>保存备注与标签</button>
@@ -217,11 +190,7 @@ export function JobWorkspace(p: {
             <button className="btn-sm" onClick={() => void toggleArchive()}>
               {job.archived ? "取消归档" : "归档该岗位"}
             </button>
-            <button className="btn-sm danger" onClick={() => void deleteJob()}>
-              {confirmDelete ? `再次确认：将同时删除 ${sessions.length} 次申请记录` : "删除岗位"}
-            </button>
           </div>
-          {confirmDelete && <div className="banner banner-error">该岗位包含 {sessions.length} 次申请记录，删除将同时删除对应 Session / Event，且不可恢复。</div>}
         </details>
       </section>
     </main>

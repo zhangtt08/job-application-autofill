@@ -54,7 +54,8 @@ export async function fillFields(plan: FillPlanPayload): Promise<{
   // 继续硬试只会把剩下每个字段都报成失败；这里停下来说清原因，让用户重新识别一次。
   let missingStreak = 0;
 
-  for (const item of items) {
+  const targets = items.map((item) => ({ item, element: findElementByFingerprint(item.reference) }));
+  for (const { item, element } of targets) {
     logger.event(LogEvent.FILL_START, `开始写入 ${item.reference.slice(0, 50)}`);
 
     if (missingStreak >= 3) {
@@ -62,7 +63,7 @@ export async function fillFields(plan: FillPlanPayload): Promise<{
       continue;
     }
 
-    const el = findElementByFingerprint(item.reference);
+    const el = element?.isConnected ? element : findElementByFingerprint(item.reference);
     if (!el) {
       missingStreak++;
       outcomes.push({ reference: item.reference, status: "failed", detail: "字段已从页面消失，请重新扫描" });
@@ -71,14 +72,19 @@ export async function fillFields(plan: FillPlanPayload): Promise<{
     }
     missingStreak = 0;
 
-    if (item.value === undefined) continue;
+    if (item.value === undefined || !item.value.trim()) {
+      outcomes.push({ reference: item.reference, status: "failed", detail: "资料为空，保留网页原值" });
+      continue;
+    }
     const previousValue = readDisplayValue(el);
 
     const verify = await fillWithVerification(el, item.value, previousValue);
-    if (verify.status === "success") {
+    if (verify.status === "success" || readDisplayValue(el) !== previousValue) {
       const undoTag = `a${++undoSeq}`;
       el.setAttribute(UNDO_ATTR, undoTag);
       originals.push({ reference: item.reference, kind: item.kind, previousValue, undoTag });
+    }
+    if (verify.status === "success") {
       outcomes.push({ reference: item.reference, status: "filled" });
       logger.event(LogEvent.FILL_SUCCESS, `写入成功（verified, attempts=${verify.attempts}） ${maskValue(item.kind, item.value)}`);
     } else if (verify.status === "unsupported") {

@@ -214,6 +214,7 @@ export function runScanPipeline(
   // 网申表单的「实习经历1/2/3」「项目1/2」是重复块，字段顺序与经历顺序一致；
   // 不做分配会让所有重复块都填第一条数据（错位）。每 id 独立计数，字段集合不齐时依然对齐。
   const entryCounters = new Map<string, number>();
+  const blockEntries = new Map<string, Map<string, number>>();
   const siteRules = options.siteRules ?? [];
   for (const raw of rawFields) {
     // Application Context Gate 前置短路（issue-004）：非申请控件必须在多条目轮转计数之前剔除，
@@ -322,9 +323,18 @@ export function runScanPipeline(
     if (options.entryIndex === undefined && idValid) {
       const def = getCanonicalFieldDef(match.fieldId);
       if (def?.multiEntry) {
-        const n = entryCounters.get(match.fieldId) ?? 0;
-        entryCounters.set(match.fieldId, n + 1);
-        entryIndex = n;
+        const collectionKey = `${raw.frameId ?? 0}|${match.fieldId.split(".")[0]}`;
+        if (raw.context.entryGroup) {
+          const blocks = blockEntries.get(collectionKey) ?? new Map<string, number>();
+          if (!blocks.has(raw.context.entryGroup)) blocks.set(raw.context.entryGroup, blocks.size);
+          blockEntries.set(collectionKey, blocks);
+          entryIndex = blocks.get(raw.context.entryGroup);
+        } else {
+          const counterKey = `${raw.frameId ?? 0}|${match.fieldId}`;
+          const n = entryCounters.get(counterKey) ?? 0;
+          entryCounters.set(counterKey, n + 1);
+          entryIndex = n;
+        }
       }
     }
     const value =

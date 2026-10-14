@@ -281,6 +281,26 @@ describe("Background：tab 指令的来源校验（真实 listener）", () => {
     expect(sendsOf("FILL_FIELDS")).toHaveLength(1);
   });
 
+  it("标签页没有 url 时从导航接口补读，识别和选库前校验仍可使用同一页面", async () => {
+    vi.spyOn(chrome.tabs, "query").mockResolvedValue([{ id: 7, active: true }] as chrome.tabs.Tab[]);
+    chrome.webNavigation.getFrame = vi.fn().mockResolvedValue({ frameId: 0, url: PAGE });
+    await import("../src/background/index");
+    const ready = await dispatch({ type: "ENSURE_CONTENT_SCRIPT" }, PANEL_SENDER);
+    expect(ready.response).toMatchObject({ ok: true, tabId: 7, url: PAGE });
+    const scan = await dispatch({ type: "SCAN_TARGET", expectedUrl: PAGE, expectedTabId: 7 }, PANEL_SENDER);
+    expect(scan.response).toMatchObject({ ok: true });
+    expect(sendsOf("SCAN_PAGE")).toHaveLength(1);
+  });
+
+  it("地址接口也失败时说明连接原因，不把网页误报为未打开", async () => {
+    vi.spyOn(chrome.tabs, "query").mockResolvedValue([{ id: 7, active: true }] as chrome.tabs.Tab[]);
+    chrome.webNavigation.getFrame = vi.fn().mockRejectedValue(new Error("unavailable"));
+    await import("../src/background/index");
+    const ready = await dispatch({ type: "ENSURE_CONTENT_SCRIPT" }, PANEL_SENDER);
+    expect(ready.response).toMatchObject({ ok: false, error: "page-url-unavailable", detail: expect.stringContaining("无法读取当前网页地址") });
+    expect(sendsOf("SCAN_PAGE")).toHaveLength(0);
+  });
+
   it("伪造 sender.id 的 FILL_TARGET：一次都不许写，且回包失败", async () => {
     await import("../src/background/index");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

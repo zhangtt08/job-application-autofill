@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   FIXTURE_BASE,
+  chooseLibraryAndFill,
   setupProfile,
   resetJobStorage,
   launchWithExtension,
@@ -50,15 +51,17 @@ async function readDom(page: Page): Promise<Record<string, string>> {
   }, TARGETS);
 }
 
-test("识别后自动填写所有已匹配字段，未匹配字段保持空值", async () => {
+test("识别只读；选择资料库后填写匹配字段", async () => {
   const page = await openAppForm();
   await page.bringToFront();
 
   // 1) Scan
   await sidePanel.getByRole("button", { name: /开始识别|重新识别/ }).click();
 
-  // 识别结束即完成自动填写。
-  await sidePanel.getByText(/填写完成 ——/).waitFor({ timeout: 20000 });
+  await expect(sidePanel.getByRole("heading", { name: "选择资料库" })).toBeVisible();
+  expect((await readDom(page))["#name"]).toBe("");
+  expect((await readDom(page))["#email"]).toBe("");
+  await chooseLibraryAndFill(sidePanel);
   const after = await readDom(page);
   expect(after["#name"]).toBe("张三");
   expect(after["#school"]).toBe("示例科技大学");

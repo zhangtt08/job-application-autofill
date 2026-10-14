@@ -400,3 +400,17 @@ describe("Export & Delete Cascade", () => {
     expect(afterClear.activeJobId).toBeNull();
   });
 });
+
+
+describe("删除记录兼容旧版回答会话", () => {
+  it("同时清除旧版数组中的目标会话，保留其他岗位和资料", async () => {
+    const backend = memoryBackend();
+    setJobStorageBackend(backend);
+    setSessionStorageBackend(backend);
+    await backend.set("afa.sessions.v1", [{ sessionId: "s1", jobContextId: "j1", answers: [] }, { sessionId: "s2", jobContextId: "j2", answers: [] }]);
+    await backend.set("afa.profile.v1", { marker: "preserve" });
+    await deleteSessionsByJob("j1");
+    expect((await backend.get("afa.sessions.v1"))["afa.sessions.v1"]).toEqual([{ sessionId: "s2", jobContextId: "j2", answers: [] }]);
+    expect((await backend.get("afa.profile.v1"))["afa.profile.v1"]).toEqual({ marker: "preserve" });
+  });
+});

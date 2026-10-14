@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "sharedPreserved": true,
+  "activeLibraryPreserved": true,
+  "projectsAndCampusPreserved": true,
+  "dataSource": "成果数据采用用户提供口径；未独立审计，不新增估算数据。自然搜索访问/曝光提升35%因统计口径不明确未采用。",
+  "libraries": [
+    {
+      "track": "default",
+      "name": "默认资料库",
+      "internships": 3,
+      "projects": 10,
+      "campus": 1,
+      "skillsCharacters": 984
+    },
+    {
+      "track": "app",
+      "name": "AI 应用｜业务自动化｜解决方案",
+      "internships": 3,
+      "projects": 4,
+      "campus": 1,
+      "skillsCharacters": 730
+    },
+    {
+      "track": "aigc",
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "internships": 3,
+      "projects": 4,
+      "campus": 1,
+      "skillsCharacters": 683
+    },
+    {
+      "track": "ops",
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "internships": 3,
+      "projects": 5,
+      "campus": 1,
+      "skillsCharacters": 700
+    }
+  ]
+}

@@ -2,7 +2,7 @@ export type MainTab = "apply" | "jobs" | "profile" | "settings";
 
 const TABS: { key: MainTab; label: string; hint: string }[] = [
   { key: "apply", label: "投递", hint: "识别并填写当前网申页面" },
-  { key: "jobs", label: "岗位", hint: "已捕获的岗位与投递记录" },
+  { key: "jobs", label: "记录", hint: "岗位与填写记录" },
   { key: "profile", label: "资料", hint: "导入与维护你的背景资料" },
   { key: "settings", label: "设置", hint: "模型与高级选项" },
 ];

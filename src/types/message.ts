@@ -10,7 +10,8 @@ export interface EnsureContentScriptMsg {
 export interface EnsureContentScriptResult {
   ok: boolean;
   url?: string;
-  error?: "no-active-tab" | "unsupported-url" | "inject-failed" | "ping-failed";
+  tabId?: number;
+  error?: "no-active-tab" | "unsupported-url" | "inject-failed" | "ping-failed" | "page-url-unavailable";
   detail?: string;
 }
 
@@ -138,15 +139,21 @@ export type SidePanelToContentMsg =
 
 export interface ScanTargetMsg {
   type: "SCAN_TARGET";
+  expectedUrl?: string;
+  expectedTabId?: number;
 }
 
 export interface FillTargetMsg {
   type: "FILL_TARGET";
+  expectedUrl?: string;
+  expectedTabId?: number;
   plan: FillPlanPayload;
 }
 
 export interface UndoTargetMsg {
   type: "UNDO_TARGET";
+  expectedUrl?: string;
+  expectedTabId?: number;
   originals: { reference: string; kind: string; previousValue: string; frameId?: number; undoTag?: string }[];
 }
 

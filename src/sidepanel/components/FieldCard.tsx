@@ -1,3 +1,4 @@
+import { rawFieldKey } from "../../types/field";
 import { useState } from "react";
 import type { CandidateField, ContentSourceType } from "../../types/field";
 import { RiskBadge } from "./RiskBadge";
@@ -47,9 +48,9 @@ const STATUS_TEXT: Record<CandidateField["status"], { text: string; cls: string 
   "need-confirm": { text: "需要确认", cls: "status-confirm" },
   manual: { text: "请人工填写", cls: "status-manual" },
   unknown: { text: "无法识别", cls: "status-muted" },
-  empty: { text: "资料库里没有对应内容", cls: "status-muted" },
-  "low-confidence": { text: "把握不足，默认不填", cls: "status-muted" },
-  unsupported: { text: "这种网页控件不支持", cls: "status-muted" },
+  empty: { text: "资料缺失", cls: "status-muted" },
+  "low-confidence": { text: "待核对", cls: "status-muted" },
+  unsupported: { text: "需手动填写", cls: "status-muted" },
   ignored: { text: "已忽略", cls: "status-muted" },
   filled: { text: "已填写", cls: "status-filled" },
   failed: { text: "填写失败", cls: "status-failed" },
@@ -73,7 +74,7 @@ function sourceBadgeText(candidate: CandidateField): { text: string; cls: string
         cls: "src-variant",
       };
     case "default":
-      return { text: "默认版本", cls: "src-default" };
+      return { text: "资料库原文", cls: "src-default" };
     case "manual":
       return { text: "手动修改", cls: "src-manual" };
     case "ai_grounded":
@@ -132,7 +133,7 @@ function OpenAnswerBlock(p: {
 
       {open.status === "not_generated" && (
         <div className="field-row">
-          <button className="btn-sm" onClick={() => p.onGenerateAnswer?.(p.candidate.raw.reference)}>
+          <button className="btn-sm" onClick={() => p.onGenerateAnswer?.(rawFieldKey(p.candidate.raw))}>
             AI 生成回答
           </button>
         </div>
@@ -160,7 +161,7 @@ function OpenAnswerBlock(p: {
               className="diff-textarea"
               value={display}
               rows={4}
-              onChange={(e) => p.onOpenAnswerEdit(p.candidate.raw.reference, e.target.value)}
+              onChange={(e) => p.onOpenAnswerEdit(rawFieldKey(p.candidate.raw), e.target.value)}
             />
           </div>
           {v && (
@@ -174,7 +175,7 @@ function OpenAnswerBlock(p: {
           )}
           {open.status === "edited" && (
             <div className="field-row">
-              <button className="btn-sm" onClick={() => p.onRevalidateAnswer?.(p.candidate.raw.reference)}>
+              <button className="btn-sm" onClick={() => p.onRevalidateAnswer?.(rawFieldKey(p.candidate.raw))}>
                 重新验证
               </button>
             </div>
@@ -235,7 +236,7 @@ function WhyMatchedBlock(p: {
             <button
               type="button"
               className="btn-sm"
-              onClick={() => p.onSwitchField?.(candidate.raw.reference, candidate.match.runnerUpFieldId!)}
+              onClick={() => p.onSwitchField?.(rawFieldKey(candidate.raw), candidate.match.runnerUpFieldId!)}
             >
               改用这一项
             </button>
@@ -258,7 +259,7 @@ export function FieldCard(props: FieldCardProps) {
   // 内容框：主观/长文本类字段即使已经写入也允许就地改后重写（改完不回写资料库）
   const isReviewEditable =
     (status === "need-confirm" || status === "ready" || status === "filled") && candidate.value?.editable === true;
-  const displayValue = candidate.editedValue ?? candidate.value?.value ?? "";
+  const displayValue = candidate.editedValue ?? candidate.value?.value ?? raw.context.currentValue ?? "";
   const manualLike = status === "manual" || status === "unsupported";
   const sourceBadge = sourceBadgeText(candidate);
 
@@ -313,9 +314,9 @@ export function FieldCard(props: FieldCardProps) {
         <span className={`line-dot dot-${status}`} aria-hidden="true" />
         <span className="field-label line-label">{labelOf(raw)}</span>
         <span className="line-value">{displayValue || "—"}</span>
-        {sourceBadge && <span className={`source-badge ${sourceBadge.cls}`}>{sourceBadge.text}</span>}
+        {devMode && sourceBadge && <span className={`source-badge ${sourceBadge.cls}`}>{sourceBadge.text}</span>}
         {devMode && <span className="line-id">{match.fieldId}</span>}
-        <span className="line-open">展开</span>
+        <span className={`line-status ${statusInfo.cls}`}>{statusInfo.text}</span>
       </button>
     );
   }
@@ -326,7 +327,7 @@ export function FieldCard(props: FieldCardProps) {
         <div className="field-label" title={raw.context.name || raw.context.id}>
           {labelOf(raw)}
         </div>
-        <RiskBadge risk={manualLike ? "MANUAL_ONLY" : risk} />
+        {devMode && <RiskBadge risk={manualLike ? "MANUAL_ONLY" : risk} />}
       </div>
 
       {props.compact && (
@@ -354,7 +355,7 @@ export function FieldCard(props: FieldCardProps) {
           )}
         </p>
       )}
-      {raw.frameId != null && raw.frameId !== 0 && (
+      {devMode && raw.frameId != null && raw.frameId !== 0 && (
         <p className="hint small">该字段在页面内嵌框架里，已按框架单独写入</p>
       )}
 
@@ -376,7 +377,7 @@ export function FieldCard(props: FieldCardProps) {
                 className="field-value value-input"
                 aria-label={`写入内容：${labelOf(raw)}`}
                 value={displayValue}
-                onChange={(e) => props.onEditValue(raw.reference, e.target.value)}
+                onChange={(e) => props.onEditValue(rawFieldKey(raw), e.target.value)}
               />
             ) : (
               <div className={`field-value${displayValue ? "" : " value-empty"}`}>
@@ -433,7 +434,7 @@ export function FieldCard(props: FieldCardProps) {
 
         {/* 匹配依据：非开放题、且确实给出了结论（匹配到字段 / 被拦下）时才值得露出。
             开放题已经有自己的事实验证区块，不再叠一层。 */}
-        {!candidate.openAnswer && (match.fieldId !== "unknown" || explain.blockedReason) && (
+        {(devMode || status === "low-confidence") && !candidate.openAnswer && (match.fieldId !== "unknown" || explain.blockedReason) && (
           <WhyMatchedBlock explain={explain} candidate={candidate} onSwitchField={props.onSwitchField} />
         )}
       </div>
@@ -444,7 +445,7 @@ export function FieldCard(props: FieldCardProps) {
             <input
               type="checkbox"
               checked={candidate.confirmed ?? false}
-              onChange={() => props.onToggleConfirm(raw.reference)}
+              onChange={() => props.onToggleConfirm(rawFieldKey(raw))}
             />
             确认填写
           </label>
@@ -456,12 +457,12 @@ export function FieldCard(props: FieldCardProps) {
             type="button"
             className="btn-sm btn-confirm-low"
             data-action="confirm-low"
-            onClick={() => props.onConfirmLowConfidence?.(raw.reference)}
+            onClick={() => props.onConfirmLowConfidence?.(rawFieldKey(raw))}
           >
-            核对过了，确认要填这一项
+            确认匹配
           </button>
         )}
-        <button className="btn-sm" onClick={() => props.onLocate(raw.reference)}>
+        <button className="btn-sm" onClick={() => props.onLocate(rawFieldKey(raw))}>
           定位字段
         </button>
         {status === "ignored" ? (
@@ -470,14 +471,14 @@ export function FieldCard(props: FieldCardProps) {
             className="btn-sm"
             data-action="unignore"
             onClick={() =>
-              candidate.siteRule ? props.onUndoSiteRule?.(candidate.siteRule.ruleId) : props.onUnignore?.(raw.reference)
+              candidate.siteRule ? props.onUndoSiteRule?.(candidate.siteRule.ruleId) : props.onUnignore?.(rawFieldKey(raw))
             }
           >
             {candidate.siteRule ? "撤销这条站点设定" : "撤销忽略"}
           </button>
         ) : (
           status !== "filled" && (
-            <button className="btn-sm" onClick={() => props.onIgnore(raw.reference)}>
+            <button className="btn-sm" onClick={() => props.onIgnore(rawFieldKey(raw))}>
               忽略这一项
             </button>
           )
@@ -490,7 +491,7 @@ export function FieldCard(props: FieldCardProps) {
             className="btn-sm"
             data-action="block-on-site"
             title={`以后在 ${props.siteHost} 上都不自动填这一栏`}
-            onClick={() => props.onBlockOnSite?.(raw.reference)}
+            onClick={() => props.onBlockOnSite?.(rawFieldKey(raw))}
           >
             这一站以后都别填
           </button>
@@ -500,7 +501,7 @@ export function FieldCard(props: FieldCardProps) {
           <button
             className="btn-sm"
             onClick={() => {
-              props.onToggleConfirm(raw.reference);
+              props.onToggleConfirm(rawFieldKey(raw));
             }}
           >
             勾选以重写这一项

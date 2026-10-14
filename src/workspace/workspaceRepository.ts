@@ -166,6 +166,13 @@ export async function setSessionStatus(sessionId: string, status: SessionStatus)
 export async function deleteSessionsByJob(jobId: string): Promise<void> {
   const sessions = await loadSessions();
   await saveSessions(sessions.filter((s) => s.jobId !== jobId));
+  const legacy = (await storage.get(SESSIONS_V1_KEY))[SESSIONS_V1_KEY];
+  if (Array.isArray(legacy)) {
+    await storage.set(SESSIONS_V1_KEY, legacy.filter((session) => session.jobContextId !== jobId));
+  } else if (legacy && typeof legacy === "object" && Array.isArray((legacy as { sessions?: unknown[] }).sessions)) {
+    const record = legacy as { sessions: { jobContextId?: string }[] };
+    await storage.set(SESSIONS_V1_KEY, { ...record, sessions: record.sessions.filter((session) => session.jobContextId !== jobId) });
+  }
 }
 
 // ---------- Events（用户 Timeline） ----------

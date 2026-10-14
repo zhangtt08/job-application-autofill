@@ -156,7 +156,7 @@ export function nearbyLabelText(el: HTMLElement): string {
     let sibling = node.previousElementSibling;
     let generic: string | undefined;
     for (let count = 0; sibling && count < 4; count++, sibling = sibling.previousElementSibling) {
-      if (hasControl(sibling)) continue;
+      if (hasControl(sibling)) break;
       const semanticText = semantic(sibling);
       if (semanticText) return semanticText;
       const text = clean(sibling.textContent ?? "");
@@ -173,6 +173,8 @@ export function nearbyLabelText(el: HTMLElement): string {
     );
     if (directText && directText.length <= 40) return directText;
 
+    const allControls = parent.querySelectorAll("input, textarea, select, [contenteditable='true'], [role='combobox']");
+    if (allControls.length > 1) break;
     const parentLabel = semantic(parent);
     if (parentLabel && parentLabel.length <= 80) return parentLabel;
 
@@ -234,12 +236,13 @@ export function groupTitleFor(el: HTMLElement): string {
 /** for= 关联 + 包裹式 label */
 function htmlForLabel(el: HTMLElement): string {
   const id = el.id;
+  const root = el.getRootNode() as Document | ShadowRoot;
   if (id) {
     // 标签属于控件自己的 document；同源 iframe 中不能查主文档。
-    const label = el.ownerDocument?.querySelector(`label[for="${escapeSelector(id)}"]`);
+    const label = root.querySelector(`label[for="${escapeSelector(id)}"]`);
     if (label) return compactText(label.textContent);
   }
-  return wrapLabel(el) || nearbyLabelText(el);
+  return wrapLabel(el) || el.getAttribute("aria-label") || ariaLabelledbyText(el) || nearbyLabelText(el);
 }
 
 function ariaLabelledbyText(el: HTMLElement): string {
@@ -301,6 +304,8 @@ export function structuralPathOf(el: HTMLElement): number[] {
  * placeholder 必须入指纹：大量招聘网站表单（如姚记 ATS）的 input 无 name/id/label，
  * 字段之间只靠 placeholder 区分——漏掉它会导致所有指纹雷同、定位/回写命中第一个输入框。
  */
+const scannedElements = new Map<string, WeakRef<HTMLElement>>();
+
 export function fingerprintOf(el: HTMLElement): string {
   const tag = el.tagName.toLowerCase();
   const type = (el as HTMLInputElement).type ?? "";
@@ -312,7 +317,10 @@ export function fingerprintOf(el: HTMLElement): string {
   // （Stage 5.5：同类元素全量 = 主文档 + open shadowRoot + same-origin iframe）
   const sameKind = collectSameKindElements(tag);
   const idx = sameKind.indexOf(el);
-  return JSON.stringify({ tag, type, name, id, label, placeholder, idx, path: structuralPathOf(el) });
+  const reference = JSON.stringify({ tag, type, name, id, label, placeholder, idx, path: structuralPathOf(el) });
+  scannedElements.set(reference, new WeakRef(el));
+  if (scannedElements.size > 5000) scannedElements.delete(scannedElements.keys().next().value!);
+  return reference;
 }
 
 /**
@@ -376,6 +384,11 @@ function matchesFingerprintAttributes(
  * 绝不能返回第一个——先用结构路径消歧，再退到同类序号 idx；两者都无法消歧时返回 null（fail-safe）。
  */
 export function findElementByFingerprint(fp: string): HTMLElement | null {
+  const remembered = scannedElements.get(fp);
+  if (remembered) {
+    const element = remembered.deref();
+    return element?.isConnected ? element : null;
+  }
   try {
     const parsed = JSON.parse(fp) as {
       tag: string; type: string; name: string; id: string; label: string; placeholder?: string; idx: number;
@@ -404,7 +417,7 @@ export function findElementByFingerprint(fp: string): HTMLElement | null {
         return p.length === parsed.path!.length && p.every((v, i) => v === parsed.path![i]);
       });
       if (byPath.length === 1) return byPath[0] ?? null;
-      if (byPath.length > 1) return null;
+      return null;
     }
     const byIdx = sameKind[parsed.idx];
     if (byIdx && matched.includes(byIdx)) return byIdx;
@@ -468,21 +481,21 @@ export function normalizeDate(s: string): string {
 export function getRadioGroup(el: HTMLInputElement): HTMLInputElement[] {
   const name = el.getAttribute("name");
   if (!name) return [el];
-  const doc = el.ownerDocument ?? document;
-  const escaped = name.replace(/"/g, '\\"');
-  const group = Array.from(doc.querySelectorAll(`input[type="radio"][name="${escaped}"]`)) as HTMLInputElement[];
+  const root = el.getRootNode() as Document | ShadowRoot;
+  const escaped = escapeSelector(name);
+  const group = Array.from(root.querySelectorAll(`input[type="radio"][name="${escaped}"]`)).filter((item) => (item as HTMLInputElement).form === el.form) as HTMLInputElement[];
   return group.length > 0 ? group : [el];
 }
 
 export function getCheckboxGroup(el: HTMLInputElement): HTMLInputElement[] {
   const name = el.getAttribute("name");
-  const doc = el.ownerDocument ?? document;
+  const root = el.getRootNode() as Document | ShadowRoot;
   if (!name) {
     // 无 name 的独立勾选框（「接受调剂」「是否同意」这类单项勾选）
     return isCheckboxElement(el) ? [el] : [];
   }
-  const escaped = name.replace(/"/g, '\\"');
-  const group = Array.from(doc.querySelectorAll(`input[type="checkbox"][name="${escaped}"]`)) as HTMLInputElement[];
+  const escaped = escapeSelector(name);
+  const group = Array.from(root.querySelectorAll(`input[type="checkbox"][name="${escaped}"]`)).filter((item) => (item as HTMLInputElement).form === el.form) as HTMLInputElement[];
   return group.length > 0 ? group : isCheckboxElement(el) ? [el] : [];
 }
 
@@ -530,7 +543,7 @@ export function readDisplayValue(el: HTMLElement): string {
     if (!el.value && isCustomSelectElement(el)) return customSelectDisplayText(el);
     return el.value;
   }
-  if (el.isContentEditable) return compactText(el.textContent ?? "", 2000);
+  if (el.isContentEditable) return el.textContent ?? "";
   if (isCustomSelectElement(el)) return customSelectDisplayText(el);
   return customSelectDisplayText(el);
 }
@@ -538,6 +551,16 @@ export function readDisplayValue(el: HTMLElement): string {
 /** 页面当前显示的值是否已经等于要填的值（日期按日期语义比，其余按归一化文本） */
 export function valueMatchesRequested(el: HTMLElement, requested: string): boolean {
   const want = normalizeChoice(requested);
+  if (isCheckboxElement(el)) {
+    const terms = [...new Set(requested.split(/[、,，;；/\n]+/).map(normalizeChoice).filter(Boolean))];
+    const selected = getCheckboxGroup(el).filter((item) => item.checked);
+    return selected.length === terms.length && terms.every((term) => selected.some((item) =>
+      [item.value, htmlForLabel(item), item.getAttribute("aria-label") ?? ""].some((text) => {
+        const normalized = normalizeChoice(text);
+        return normalized === term || polarityMatches(term, text) ||
+          (term.length >= 2 && normalized.length >= 2 && (normalized.includes(term) || term.includes(normalized)));
+      })));
+  }
   // 原生 select 的「值」是 option 的 value，用户看到的是文本，两者都算填对了
   if (isSelectElement(el)) {
     const selected = el.selectedOptions[0];

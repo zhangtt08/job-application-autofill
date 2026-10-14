@@ -1,0 +1,18 @@
+技术与业务能力
+1. 需求与流程：梳理 SOP、需求清单和验收标准，按耗时、频率及实施难度安排优先级，结合使用反馈迭代。
+2. AI 应用：具备 Prompt / Skill、Tool Calling、Tool Routing、Agent Loop 和 MCP 实践，可将业务规则与软件功能转为可调用流程。
+3. 知识检索：使用分项目 RAG、Embedding、Vector Search 及 BM25，具备文档切分、来源维护、规则更新和误判回溯经验。
+4. 技术基础：具备 Python 基础及 REST API、Playwright、RPA、文件批处理实践；借助 Agent 使用 Node.js、React、TypeScript、Electron / Tauri 开发应用。
+5. 数据处理：熟悉 Excel 函数、跨表匹配与批量处理；使用飞书多维表格关联记录、自动化、视图、筛选、权限及图表，管理日均数千条数据和任务状态。
+6. 质量与成本：通过样本对照、抽检、日志和结果回读定位问题；具备重试、断点续跑、模型回退、上下文压缩、缓存及 Token 用量分析实践。
+7. 应用交付：借助 Agent 完成方案、原型、测试及部署，排查环境和账号差异，编写教程并支持团队使用。
+8. SEO / GEO：具备行业长尾词、FAQ、产品页、Sitemap、结构化信息、站点提交及多渠道分发实践，跟踪收录、排名与 AI 引用。
+软件与工具
+1. Agent 开发工具：使用 Claude Code、Codex、Cursor 等工具开展 Vibe Coding、测试及迭代。
+2. 自动化工具：使用 Playwright、影刀 RPA 及自研工作流工具。
+3. 数据办公：使用 Excel、飞书多维表格处理匹配、查重、统计及状态管理。
+4. 后期软件：熟练使用 Premiere Pro、After Effects、剪映；熟悉 Lightroom。
+语言能力
+英语：CET-6（455 分），可检索英文行业资料、AI 工具文档及基础技术资料。
+证书
+大学英语六级（CET-6）

@@ -162,7 +162,7 @@ export async function setRadioValue(el: HTMLInputElement, value: string): Promis
 /**
  * checkbox 组写入：把资料值按分隔符拆成词条，逐个勾选文本命中的项。
  * 只做精确/唯一包含命中，命不中就整体失败——猜着勾比不勾更容易造成错填。
- * 原有勾选保持不变（撤销时按原值恢复）。
+ * 用资料库的完整选择覆盖原有勾选（撤销时按原值恢复）。
  */
 export async function setCheckboxValues(el: HTMLElement, value: string): Promise<SetTextResult> {
   const group = getCheckboxGroup(el as HTMLInputElement);
@@ -195,21 +195,23 @@ export async function setCheckboxValues(el: HTMLElement, value: string): Promise
     if (!hit) missing.push(term);
     else if (!picked.includes(hit)) picked.push(hit);
   }
-  if (picked.length === 0) {
+  if (picked.length === 0 || missing.length > 0) {
     return { ok: false, detail: `checkbox 中没有匹配选项: ${value.slice(0, 24)}` };
   }
+  if (group.some((item) => item.disabled && item.checked !== picked.includes(item))) return { ok: false, detail: "选项已禁用" };
   try {
-    for (const item of picked) {
-      if (item.checked) continue;
+    for (const item of group) {
+      const wanted = picked.includes(item);
+      if (item.checked === wanted) continue;
       item.click();
-      if (!item.checked) item.checked = true;
+      if (item.checked !== wanted) item.checked = wanted;
       fire(item, Event, "input");
       fire(item, Event, "change");
     }
   } catch (err) {
     return { ok: false, detail: String(err) };
   }
-  const settled = await waitFor(() => picked.every((item) => item.checked), 300, 40);
+  const settled = await waitFor(() => group.every((item) => item.checked === picked.includes(item)), 300, 40);
   return settled
     ? { ok: true, actual: readDisplayValue(el) }
     : { ok: false, detail: "checkbox 勾选未生效" };

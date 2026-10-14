@@ -1,12 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   FIXTURE_BASE,
+  chooseLibraryAndFill,
   setupProfile,
   resetJobStorage,
   launchWithExtension,
   openSidePanel,
   revealPreview,
-  setAutoFill,
 } from "./helpers";
 
 /**
@@ -50,7 +50,7 @@ async function openForm(file = "application-form.html"): Promise<Page> {
 
 async function recognize(): Promise<void> {
   await sidePanel.getByRole("button", { name: /开始识别|重新识别/ }).click();
-  await sidePanel.getByText(/填写完成 ——/).waitFor({ timeout: 60_000 });
+  await chooseLibraryAndFill(sidePanel);
 }
 
 function card(label: string) {
@@ -90,23 +90,20 @@ test("承诺 / 签名 / 调剂类控件永不代填，提交按钮永不被点�
   expect(await page.locator("#submit-btn").getAttribute("data-clicked")).not.toBe("1");
 });
 
-test("点「忽略」的字段不写入，其余照常", async () => {
-  // 这条走的是「先看清单再填」的节奏：先关掉识别后自动填写
-  await setAutoFill(sidePanel, false);
+test("忽略的字段不会随其他编辑再次写入", async () => {
   const page = await openForm();
-  await sidePanel.getByRole("button", { name: /开始识别|重新识别/ }).click();
-  await revealPreview(sidePanel);
-  await sidePanel.locator(".field-card").first().waitFor({ timeout: 20000 });
-
-  // 已按资料填好的客观信息现在是一行紧凑条目，先展开再操作（忽略 / 定位都在展开后）
-  await card("姓名").click();
-  await card("姓名").getByRole("button", { name: /忽略/ }).click();
-  await sidePanel.getByRole("button", { name: /填写确认的|确认并填写/ }).click();
-  await sidePanel.locator(".dialog .primary", { hasText: "确认填写" }).click();
-  await sidePanel.getByText(/填写完成 ——/).waitFor({ timeout: 60_000 });
-
+  await recognize();
+  await sidePanel.getByRole("button", { name: "撤销填写", exact: true }).click();
   await expect(page.locator("#name")).toHaveValue("");
-  await expect(page.locator("#email")).toHaveValue("zhangsan@test.com");
+  await revealPreview(sidePanel);
+  await card("姓名").click();
+  await card("姓名").getByRole("button", { name: /忽略/ }).first().click();
+  await page.locator("#name").fill("");
+  await card("项目描述").locator(".value-input").fill("修改后的项目原文");
+  await sidePanel.getByRole("button", { name: /^填写 \d+ 项/ }).click();
+  await sidePanel.locator(".dialog .primary", { hasText: "确认填写" }).click();
+  await expect(page.locator("#project-desc")).toHaveValue("修改后的项目原文");
+  await expect(page.locator("#name")).toHaveValue("");
 });
 
 test("手工编辑值后重新填写，写入的是编辑后的值", async () => {
@@ -115,10 +112,10 @@ test("手工编辑值后重新填写，写入的是编辑后的值", async () =>
   await revealPreview(sidePanel);
 
   const desc = card("项目描述");
+  await desc.click();
   await desc.locator(".value-input").fill("SafetyE2E-手工编辑的值");
-  await sidePanel.getByRole("button", { name: /填写确认的|确认并填写/ }).click();
+  await sidePanel.getByRole("button", { name: /^填写 \d+ 项/ }).click();
   await sidePanel.locator(".dialog .primary", { hasText: "确认填写" }).click();
-  await sidePanel.getByText(/填写完成 ——/).waitFor({ timeout: 60_000 });
 
   await expect(page.locator("#project-desc")).toHaveValue("SafetyE2E-手工编辑的值");
 });
@@ -127,7 +124,7 @@ test("撤销把写入的值全部恢复", async () => {
   const page = await openForm();
   await recognize();
 
-  await sidePanel.getByRole("button", { name: /撤销本次填写/ }).click();
+  await sidePanel.getByRole("button", { name: /撤销填写/ }).click();
   await sidePanel.getByText(/已撤销本次填写/).waitFor({ timeout: 30_000 });
 
   await expect(page.locator("#name")).toHaveValue("");

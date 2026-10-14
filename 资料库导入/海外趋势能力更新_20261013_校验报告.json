@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "liveStorageReadback": true,
+  "appLibraryUnchanged": true,
+  "identityAndAllExperiencesPreserved": true,
+  "backup": "导入前原资料库_2026-10-13T15-19-26-123Z.json",
+  "libraries": [
+    {
+      "name": "默认资料库",
+      "skillsCharacters": 995
+    },
+    {
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "skillsCharacters": 745
+    },
+    {
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "skillsCharacters": 755
+    }
+  ]
+}

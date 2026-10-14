@@ -4,16 +4,18 @@ import {
   ariaLabelledbyText,
   closestHeadingText,
   compactText,
-  escapeSelector,
   fieldsetLegendText,
   fingerprintOf,
   groupTitleFor,
+  getRadioGroup,
+  getCheckboxGroup,
   htmlForLabel,
   isCustomSelectElement,
   isDatePickerElement,
   isInputElement,
   isSelectElement,
   isTextAreaElement,
+  structuralPathOf,
 } from "./domUtils";
 
 /** 语境信号最多往上采 6 层，且不越过 body/html（§十一：绝不以 document.body 全文为准）。
@@ -103,6 +105,27 @@ function collectSiblingLabels(el: HTMLElement): string[] {
   return [];
 }
 
+/** 重复经历按容器分组，缺少某一栏时也不把后面的字段拉到上一条经历。 */
+function entryGroupOf(el: HTMLElement): string | undefined {
+  const selector = "input:not([type=hidden]), textarea, select";
+  let node = el.parentElement;
+  for (let depth = 0; node?.parentElement && depth < 8; depth++, node = node.parentElement) {
+    if (/^(FORM|BODY|HTML)$/.test(node.tagName)) break;
+    const controls = Array.from(node.querySelectorAll<HTMLElement>(selector));
+    const explicitEntry = /(^|[\s_-])(entry|experience|education)([\s_-]|$)/i.test(String(node.className)) && !/^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName);
+    if (controls.length < (explicitEntry ? 1 : 2)) continue;
+    const labels = new Set(controls.map((control) => htmlForLabel(control)).filter(Boolean));
+    const peers = Array.from(node.parentElement.children).filter((peer) => peer !== node && peer.tagName === node!.tagName);
+    const repeated = peers.some((peer) => {
+      const others = Array.from(peer.querySelectorAll<HTMLElement>(selector));
+      if (others.length < (explicitEntry ? 1 : 2)) return false;
+      return others.filter((control) => labels.has(htmlForLabel(control))).length >= (explicitEntry ? 1 : 2);
+    });
+    if (repeated) return JSON.stringify(structuralPathOf(node));
+  }
+  return undefined;
+}
+
 /** 提取 input/textarea/select 的上下文信号（全部只读） */
 export function extractContext(el: HTMLElement, groupLabelOverride = ""): RawFieldContext {
   // 元素可能来自同源 iframe；不能用主窗口的 instanceof 判断。
@@ -123,6 +146,7 @@ export function extractContext(el: HTMLElement, groupLabelOverride = ""): RawFie
   let prev = el.previousElementSibling as HTMLElement | null;
   for (let hop = 0; hop < 3 && prev; hop++) {
     const t = compactText(prev.textContent, 60);
+    if (prev.matches("input, textarea, select") || prev.querySelector("input, textarea, select")) break;
     if (t) {
       prevSiblingText = t;
       break;
@@ -131,7 +155,9 @@ export function extractContext(el: HTMLElement, groupLabelOverride = ""): RawFie
   }
 
   // 近距离父容器文字（向上 2 层，截断；用于 Level 3 综合判断，噪音权重低）
-  const parentText = compactText(el.parentElement?.parentElement?.textContent, 200);
+  const local = el.parentElement;
+  const parentText = local && local.querySelectorAll("input, textarea, select, [role=combobox]").length <= 1
+    ? compactText(local.textContent, 200) : "";
 
   // 只读地取 number 控件步长（读属性而非 IDL，避免默认值口径分歧）：
   // 非数字控件 = undefined（不适用）；step="any" = null（不设限）；其余按属性值，缺省/非法按 HTML 默认 1
@@ -165,6 +191,7 @@ export function extractContext(el: HTMLElement, groupLabelOverride = ""): RawFie
       : isCustomSelectElement(el)
       ? "custom-select"
       : input?.type ?? (textarea ? "textarea" : select ? "select-one" : "contenteditable"),
+    entryGroup: entryGroupOf(el),
     // input 与 textarea 都支持 maxlength 属性（此前漏了 textarea，导致字数约束检查失效）
     maxLength:
       (input ?? textarea) && (input ?? textarea)!.maxLength > 0 ? (input ?? textarea)!.maxLength : null,
@@ -172,7 +199,7 @@ export function extractContext(el: HTMLElement, groupLabelOverride = ""): RawFie
     required: el.hasAttribute("required") || el.getAttribute("aria-required") === "true",
     disabled: input?.disabled ?? textarea?.disabled ?? select?.disabled ?? false,
     readOnly: input?.readOnly ?? textarea?.readOnly ?? false,
-    currentValue: input?.value ?? textarea?.value ?? select?.value ?? (isCustomSelectElement(el) ? (el.textContent ?? "").trim() : ""),
+    currentValue: input?.value ?? textarea?.value ?? select?.value ?? (el.textContent ?? "").trim(),
     ancestorSignals: collectAncestorSignals(el),
     siblingLabels: collectSiblingLabels(el),
   };
@@ -190,10 +217,7 @@ export function extractSelectOptions(select: HTMLSelectElement): string[] {
 export function radioGroupElements(input: HTMLInputElement): HTMLInputElement[] | null {
   const name = input.getAttribute("name");
   if (!name) return null;
-  const doc = input.ownerDocument ?? document;
-  const group = Array.from(
-    doc.querySelectorAll(`input[type="${input.type}"][name="${escapeSelector(name)}"]`),
-  ) as HTMLInputElement[];
+  const group = input.type === "radio" ? getRadioGroup(input) : getCheckboxGroup(input);
   return group.length > 0 ? group : null;
 }
 

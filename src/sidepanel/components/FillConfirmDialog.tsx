@@ -1,3 +1,4 @@
+import { rawFieldKey } from "../../types/field";
 import type { CandidateField } from "../../types/field";
 
 export interface FillConfirmDialogProps {
@@ -51,7 +52,7 @@ export function FillConfirmDialog({ candidates, onCancel, onConfirm }: FillConfi
         ) : (
           <ul className="confirm-list">
             {toFill.map((c) => (
-              <li key={c.raw.reference} className="confirm-item">
+              <li key={rawFieldKey(c.raw)} className="confirm-item">
                 <span className="confirm-item-label">{fieldLabel(c)}</span>
                 <span className="confirm-item-value" title={c.editedValue ?? c.value?.value ?? ""}>
                   {preview(c.editedValue ?? c.value?.value ?? "")}

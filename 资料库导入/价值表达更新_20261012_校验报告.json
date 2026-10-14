@@ -1,0 +1,571 @@
+{
+  "ok": true,
+  "storageReadback": true,
+  "sharedPreserved": true,
+  "activeLibraryPreserved": true,
+  "backup": "导入前原资料库_2026-10-12T02-44-25-496Z.json",
+  "libraries": [
+    {
+      "id": "lib_muwnihzl_f2wjsle6",
+      "name": "默认资料库",
+      "projects": 10,
+      "internships": 3,
+      "campus": 1,
+      "skillsCharacters": 976,
+      "changedFields": 48
+    },
+    {
+      "id": "ztt_app_20261006",
+      "name": "AI 应用｜业务自动化｜解决方案",
+      "projects": 4,
+      "internships": 3,
+      "campus": 1,
+      "skillsCharacters": 651,
+      "changedFields": 26
+    },
+    {
+      "id": "ztt_aigc_20261006",
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "projects": 4,
+      "internships": 3,
+      "campus": 1,
+      "skillsCharacters": 565,
+      "changedFields": 20
+    },
+    {
+      "id": "ztt_ops_20261006",
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "projects": 5,
+      "internships": 3,
+      "campus": 1,
+      "skillsCharacters": 704,
+      "changedFields": 37
+    }
+  ],
+  "changes": [
+    {
+      "library": "默认资料库",
+      "field": "content.personalAdvantages"
+    },
+    {
+      "library": "默认资料库",
+      "field": "content.selfIntroduction"
+    },
+    {
+      "library": "默认资料库",
+      "field": "internships[0].description"
+    },
+    {
+      "library": "默认资料库",
+      "field": "internships[0].workContent"
+    },
+    {
+      "library": "默认资料库",
+      "field": "internships[0].variants.agent"
+    },
+    {
+      "library": "默认资料库",
+      "field": "internships[0].variants.aiApplication"
+    },
+    {
+      "library": "默认资料库",
+      "field": "internships[0].variants.aiOperation"
+    },
+    {
+      "library": "默认资料库",
+      "field": "internships[0].variants.aiProduct"
+    },
+    {
+      "library": "默认资料库",
+      "field": "internships[0].variants.aiSolution"
+    },
+    {
+      "library": "默认资料库",
+      "field": "internships[0].variants.aigcMarketing"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[0].description"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[0].workContent"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[0].variants.agent"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[0].variants.aiApplication"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[0].variants.aiOperation"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[0].variants.aiProduct"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[0].variants.aiSolution"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[0].variants.aigcMarketing"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[1].description"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[1].responsibilities"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[1].workContent"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[1].variants.agent"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[1].variants.aiApplication"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[1].variants.aiOperation"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[1].variants.aiProduct"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[1].variants.aiSolution"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[1].variants.aigcMarketing"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[6].description"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[6].workContent"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[6].achievements"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[6].summary"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[6].variants.agent"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[6].variants.aiApplication"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[6].variants.aiOperation"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[6].variants.aiProduct"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[6].variants.aiSolution"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[6].variants.aigcMarketing"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].description"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].responsibilities"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].workContent"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].achievements"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].summary"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].variants.agent"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].variants.aiApplication"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].variants.aiOperation"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].variants.aiProduct"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].variants.aiSolution"
+    },
+    {
+      "library": "默认资料库",
+      "field": "projects[7].variants.aigcMarketing"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "content.personalAdvantages"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "internships[0].description"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "internships[0].workContent"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "internships[0].variants.agent"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "internships[0].variants.aiApplication"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "internships[0].variants.aiOperation"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "internships[0].variants.aiProduct"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "internships[0].variants.aiSolution"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "internships[0].variants.aigcMarketing"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[0].description"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[0].workContent"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[0].variants.agent"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[0].variants.aiApplication"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[0].variants.aiOperation"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[0].variants.aiProduct"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[0].variants.aiSolution"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[0].variants.aigcMarketing"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[1].description"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[1].responsibilities"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[1].workContent"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[1].variants.agent"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[1].variants.aiApplication"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[1].variants.aiOperation"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[1].variants.aiProduct"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[1].variants.aiSolution"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "field": "projects[1].variants.aigcMarketing"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "content.personalAdvantages"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "internships[0].description"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "internships[0].workContent"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "internships[0].variants.agent"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "internships[0].variants.aiApplication"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "internships[0].variants.aiOperation"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "internships[0].variants.aiProduct"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "internships[0].variants.aiSolution"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "internships[0].variants.aigcMarketing"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].description"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].responsibilities"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].workContent"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].achievements"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].summary"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].variants.agent"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].variants.aiApplication"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].variants.aiOperation"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].variants.aiProduct"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].variants.aiSolution"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "field": "projects[0].variants.aigcMarketing"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "content.personalAdvantages"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "content.selfIntroduction"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "internships[0].description"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "internships[0].workContent"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "internships[0].variants.agent"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "internships[0].variants.aiApplication"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "internships[0].variants.aiOperation"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "internships[0].variants.aiProduct"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "internships[0].variants.aiSolution"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "internships[0].variants.aigcMarketing"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[0].description"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[0].workContent"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[0].variants.agent"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[0].variants.aiApplication"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[0].variants.aiOperation"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[0].variants.aiProduct"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[0].variants.aiSolution"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[0].variants.aigcMarketing"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[1].description"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[1].responsibilities"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[1].workContent"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[1].variants.agent"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[1].variants.aiApplication"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[1].variants.aiOperation"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[1].variants.aiProduct"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[1].variants.aiSolution"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[1].variants.aigcMarketing"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[3].description"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[3].workContent"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[3].achievements"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[3].summary"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[3].variants.agent"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[3].variants.aiApplication"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[3].variants.aiOperation"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[3].variants.aiProduct"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[3].variants.aiSolution"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "field": "projects[3].variants.aigcMarketing"
+    }
+  ]
+}

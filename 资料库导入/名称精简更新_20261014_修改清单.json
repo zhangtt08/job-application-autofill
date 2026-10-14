@@ -1,0 +1,288 @@
+{
+  "ok": true,
+  "changes": [
+    {
+      "library": "默认资料库",
+      "type": "岗位",
+      "before": "AI 应用开发｜业务流程自动化",
+      "after": "AI 应用开发"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目名称",
+      "before": "广告素材处理 Agent 与全链路业务自动化系统",
+      "after": "广告素材自动化系统"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目角色",
+      "before": "独立构建｜业务自动化落地",
+      "after": "独立开发"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目名称",
+      "before": "Tcode 与 MCP 中枢｜跨应用 AI 任务系统",
+      "after": "Tcode 跨应用任务中枢"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目角色",
+      "before": "独立产品设计与开发",
+      "after": "独立开发"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目名称",
+      "before": "Agent 创作工具链｜素材准备 · 视频 · 海报 · 音频",
+      "after": "多媒体创作工具链"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目角色",
+      "before": "独立产品设计与开发",
+      "after": "独立开发"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目名称",
+      "before": "ACB｜跨机器项目与 Agent 上下文交接系统",
+      "after": "ACB 上下文交接工具"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目名称",
+      "before": "Application Form Assistant｜网申资料库与自动填写助手",
+      "after": "网申自动填写助手"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目角色",
+      "before": "独立产品设计与开发",
+      "after": "独立开发"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目名称",
+      "before": "TrendScope｜热点决策与内容增长实践",
+      "after": "TrendScope 选题系统"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目角色",
+      "before": "独立产品开发与内容运营",
+      "after": "开发与运营"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目名称",
+      "before": "个人品牌网站与 SEO / GEO 运营实践",
+      "after": "个人网站 SEO / GEO 优化"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目角色",
+      "before": "网站产品构建与运营",
+      "after": "开发与运营"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目名称",
+      "before": "AIGC 视频与音画内容创作",
+      "after": "AIGC 视频创作"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目角色",
+      "before": "创意策划｜独立创作",
+      "after": "独立创作"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目名称",
+      "before": "AIGC 系列海报与品牌视觉表达",
+      "after": "AIGC 品牌视觉创作"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目角色",
+      "before": "视觉创意与独立制作",
+      "after": "视觉主创"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目名称",
+      "before": "品牌策略与整合营销方案实践",
+      "after": "品牌整合营销策划"
+    },
+    {
+      "library": "默认资料库",
+      "type": "项目角色",
+      "before": "独立策划与方案设计",
+      "after": "独立策划"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "type": "岗位",
+      "before": "AI 应用开发｜业务流程自动化",
+      "after": "AI 应用开发"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "type": "项目名称",
+      "before": "广告素材处理 Agent 与全链路业务自动化系统",
+      "after": "广告素材自动化系统"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "type": "项目角色",
+      "before": "独立构建｜业务自动化落地",
+      "after": "独立开发"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "type": "项目名称",
+      "before": "Tcode 与 MCP 中枢｜跨应用 AI 任务系统",
+      "after": "Tcode 跨应用任务中枢"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "type": "项目角色",
+      "before": "独立产品设计与开发",
+      "after": "独立开发"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "type": "项目名称",
+      "before": "Agent 创作套件｜AgentCut · AgentCanvas · AgentVideo",
+      "after": "Agent 多媒体创作套件"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "type": "项目角色",
+      "before": "独立产品设计与开发",
+      "after": "独立开发"
+    },
+    {
+      "library": "AI 应用｜业务自动化｜解决方案",
+      "type": "项目名称",
+      "before": "ACB｜跨机器项目与 Agent 上下文交接系统",
+      "after": "ACB 上下文交接工具"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "type": "岗位",
+      "before": "AI 应用开发｜业务流程自动化",
+      "after": "AI 应用开发"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "type": "项目名称",
+      "before": "AIGC 视频与音画内容创作",
+      "after": "AIGC 视频创作"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "type": "项目角色",
+      "before": "创意策划｜独立创作",
+      "after": "独立创作"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "type": "项目名称",
+      "before": "AIGC 系列海报与品牌视觉表达",
+      "after": "AIGC 品牌视觉创作"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "type": "项目角色",
+      "before": "视觉创意与独立制作",
+      "after": "视觉主创"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "type": "项目名称",
+      "before": "Agent 创作工具链｜素材准备 · 视频 · 海报 · 音频",
+      "after": "多媒体创作工具链"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "type": "项目角色",
+      "before": "独立产品设计与开发",
+      "after": "独立开发"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "type": "项目名称",
+      "before": "品牌策略与整合营销方案实践",
+      "after": "品牌整合营销策划"
+    },
+    {
+      "library": "AIGC 创作｜视觉内容｜创作工具",
+      "type": "项目角色",
+      "before": "独立策划与方案设计",
+      "after": "独立策划"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "type": "项目名称",
+      "before": "企业素材业务数字化与 Agent 自动化落地",
+      "after": "广告素材自动化系统"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "type": "项目角色",
+      "before": "业务需求分析｜流程产品化与应用推广",
+      "after": "产品运营"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "type": "项目名称",
+      "before": "Tcode 与 MCP 中枢｜AI 任务助手与产品体验优化",
+      "after": "Tcode 跨应用任务中枢"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "type": "项目角色",
+      "before": "独立产品构建与体验迭代",
+      "after": "产品运营"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "type": "项目名称",
+      "before": "TrendScope｜热点决策与内容增长实践",
+      "after": "TrendScope 选题系统"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "type": "项目角色",
+      "before": "独立产品开发与内容运营",
+      "after": "开发与运营"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "type": "项目名称",
+      "before": "个人品牌网站与 SEO / GEO 运营实践",
+      "after": "个人网站 SEO / GEO 优化"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "type": "项目角色",
+      "before": "网站产品构建与运营",
+      "after": "开发与运营"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "type": "项目名称",
+      "before": "品牌策略与整合营销方案实践",
+      "after": "品牌整合营销策划"
+    },
+    {
+      "library": "AI 运营｜产品运营｜SEO / GEO",
+      "type": "项目角色",
+      "before": "独立策划与方案设计",
+      "after": "独立策划"
+    }
+  ],
+  "onlyNameFieldsChanged": true
+}

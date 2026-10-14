@@ -150,8 +150,18 @@ async function toContent<T>(tabId: number, frameId: number, msg: unknown): Promi
 
 async function ensureReady(): Promise<ReadyState> {
   const tab = await getActiveTab();
-  if (!tab?.id) return { ok: false, error: "no-active-tab" };
-  const url = tab.url ?? "";
+  if (tab?.id == null) return { ok: false, error: "no-active-tab" };
+  let url = tab.url ?? "";
+  if (!url) {
+    // 部分浏览器/站点权限下 tabs 不返回 url，用已授权的导航接口补读同一标签页。
+    try {
+      url = (await chrome.webNavigation.getFrame({ tabId: tab.id, frameId: 0 }))?.url ?? "";
+    } catch {
+      /* 读取失败在下面返回明确的连接问题，不误报没有打开表单。 */
+    }
+  }
+  if (!url) return { ok: false, error: "page-url-unavailable", tabId: tab.id,
+    detail: "无法读取当前网页地址，请允许扩展在此网站运行，刷新网页后重试" };
   if (url && !isInjectableUrl(url)) {
     return { ok: false, error: "unsupported-url", url, detail: "仅支持 http/https 页面" };
   }
@@ -322,7 +332,11 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender: SenderLike, s
     onNotReady: (ready: ReadyState) => unknown,
   ): Promise<{ ok: true; tabId: number } | { ok: false; response: unknown }> => {
     const ready = await ensureReady();
-    if (!ready.ok || !ready.tabId) return { ok: false, response: onNotReady(ready) };
+    if (!ready.ok || ready.tabId == null) return { ok: false, response: onNotReady(ready) };
+    if (("expectedUrl" in msg && msg.expectedUrl && msg.expectedUrl !== ready.url) ||
+        ("expectedTabId" in msg && msg.expectedTabId != null && msg.expectedTabId !== ready.tabId)) {
+      return { ok: false, response: { ok: false, error: "页面已切换，请重新识别", outcomes: [], originals: [], restored: 0, failed: 0 } };
+    }
     const bound = checkSenderTargetsSameTab(sender, { tabId: ready.tabId, url: ready.url }, chrome.runtime.id);
     if (!bound.ok) {
       logRejection(msg.type, bound, sender);
@@ -338,6 +352,7 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender: SenderLike, s
         return {
           ok: ready.ok,
           url: ready.url,
+          tabId: ready.tabId,
           error: ready.error as EnsureContentScriptResult["error"],
           detail: ready.detail,
         } satisfies EnsureContentScriptResult;
