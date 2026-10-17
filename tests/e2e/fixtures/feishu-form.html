@@ -1,0 +1,66 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>飞书结构回归 · 合成申请表</title>
+<style>
+body{font:14px "Microsoft YaHei",sans-serif;max-width:900px;margin:32px auto;color:#202a35}form{padding:24px;border:1px solid #ddd}
+.createFormSection{display:flex;border-top:1px solid #ddd;padding:24px 0;gap:32px}.createFormSection-left{width:160px;flex-shrink:0}.createFormSection-title{font-size:18px;font-weight:600}.createFormSection-right{flex:1}.atsx-form-item{margin-bottom:16px}.atsx-form-item-label{margin-bottom:6px}input,textarea,[role=combobox]{box-sizing:border-box;width:100%;border:1px solid #ccd3dd;border-radius:5px;padding:10px;font:inherit}textarea{height:90px}.resumeEditForm-item{margin-bottom:24px}.addMore-add{cursor:pointer;color:#3564c6}.hidden-search{width:0;height:0;padding:0;border:0;position:absolute}.atsx-select-selection{cursor:pointer}.atsx-select-dropdown{border:1px solid #ccc;background:white;padding:8px}[role=option]{padding:8px;cursor:pointer}
+.atsx-date-picker-period-month{display:flex;gap:12px}.atsx-date-picker-period-month-label{cursor:pointer;padding:10px;border:1px solid #ccc}.atsx-date-picker-period-hidden-input{width:0;height:0;border:0;padding:0;position:absolute}.atsx-date-picker-dropdown{background:white;border:1px solid #ccc;padding:8px;position:fixed;top:80px;left:300px;z-index:10}.atsx-date-picker-period-month-panel{display:flex;gap:16px}.atsx-date-picker-period-month-panel-list{max-height:240px;overflow:auto}.atsx-date-picker-period-month-panel-list-item{padding:8px;cursor:pointer}
+</style>
+<form><h1>网申表单 · 合成数据</h1><div class="atsx-form-item"><label for="name">姓名</label><input id="name" value="导入旧姓名"></div><div id="sections"></div><button type="submit">提交简历</button></form>
+<script>
+window.submitClicks=0;window.addClicks={education:0,internship:0,project:0,works:0};
+document.querySelector('form').addEventListener('submit',event=>{event.preventDefault();window.submitClicks++});
+const titles={education:'教育经历',internship:'实习经历',project:'项目经历',works:'作品'};
+function row(id,label,value,area=false){
+ const col=document.createElement('div');col.className='atsx-col atsx-col-24';
+ col.innerHTML=`<div class="atsx-row atsx-form-item"><div class="atsx-form-item-label"><label for="${id}">${label}</label></div><div class="atsx-form-item-control-wrapper"><div class="atsx-form-item-control"><span class="atsx-form-item-children"></span></div></div></div>`;
+ const control=document.createElement(area?'textarea':'input');control.id=id;control.className='atsx-input';control.value=value;
+ col.querySelector('span').append(control);return col;
+}
+function degree(id,value){
+ const col=row(id,'学历',''); const input=col.querySelector('input');
+ const wrap=document.createElement('div');wrap.className='atsx-select';wrap.id=id;
+ wrap.innerHTML=`<div class="atsx-select-selection" role="combobox"><div class="atsx-select-selection__rendered"><span class="atsx-select-selection-selected-value">${value}</span><input class="atsx-select-search__field hidden-search"></div></div>`;
+ const combo=wrap.firstElementChild;
+ combo.addEventListener('click',()=>{
+  if(wrap.querySelector('[role=listbox]'))return;
+  const popup=document.createElement('div');popup.className='atsx-select-dropdown';popup.setAttribute('role','listbox');
+  for(const text of ['本科','硕士','博士']){const option=document.createElement('div');option.setAttribute('role','option');option.textContent=text;option.addEventListener('click',event=>{event.stopPropagation();combo.querySelector('span').textContent=text;popup.remove()});popup.append(option)}
+  wrap.append(popup);
+ });
+ input.replaceWith(wrap);return col;
+}
+function period(id,old){
+ const col=row(id,'起止时间','');const hidden=col.querySelector('input');const wrap=document.createElement('div');wrap.className='atsx-date-picker atsx-date-picker-period-month';wrap.dataset.cy=id+'Input';
+ for(const [index,end] of ['Begin','End'].entries()){
+  const label=document.createElement('div');label.className='atsx-date-picker-period-month-label';label.dataset.cy=id+'Input'+end;
+  label.innerHTML=`<span data-cy="year">${old?(index===0?'2019':'2027'):''}</span>-<span data-cy="month">${old?'09':''}</span>`;
+  label.addEventListener('click',()=>{
+   document.querySelectorAll('.atsx-date-picker-dropdown').forEach(e=>e.remove());
+   const popup=document.createElement('div');popup.className='atsx-date-picker-dropdown';const panel=document.createElement('div');panel.className='atsx-date-picker-period-month-panel';panel.dataset.cy=label.dataset.cy+'Dropdown';
+   for(const [key,values] of [['year',['2019','2020','2021','2022','2023','2024','2025','2026','2027']],['month',Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0'))]]){
+    const list=document.createElement('div');list.className='atsx-date-picker-period-month-panel-list';
+    for(const value of values){const option=document.createElement('div');option.className='atsx-date-picker-period-month-panel-list-item';option.dataset.cy=value;option.textContent=value;option.addEventListener('click',event=>{event.stopPropagation();label.querySelector(`[data-cy=${key}]`).textContent=value;if(key==='month')popup.remove()});list.append(option)}panel.append(list);
+   }popup.append(panel);document.body.append(popup);
+  });wrap.append(label);
+ }
+ const input=document.createElement('input');input.className='atsx-date-picker-period-hidden-input';wrap.append(input);hidden.replaceWith(wrap);return col;
+}
+document.body.addEventListener('click',event=>{if(!event.target.closest('.atsx-date-picker,.atsx-date-picker-dropdown'))document.querySelectorAll('.atsx-date-picker-dropdown').forEach(e=>e.remove())});
+function entry(group,i,old){
+ const node=document.createElement('div');node.className=`resumeEditForm-item resumeEditForm-${group}`;
+ const value=old?'导入旧值':'';
+ if(group==='education')node.append(row(`${group}[${i}].school`,'学校名称',value),degree(`${group}[${i}].degree`,old?'博士':''),row(`${group}[${i}].fieldOfStudy`,'专业',value));
+ if(group==='internship')node.append(row(`${group}[${i}].company`,'公司名称',value),row(`${group}[${i}].title`,'职位名称',value),row(`${group}[${i}].desc`,'描述',old?'旧概述：登录验证和职责': '',true));
+ if(group==='project')node.append(row(`${group}[${i}].name`,'项目名称',value),row(`${group}[${i}].role`,'项目角色',value),row(`${group}[${i}].desc`,'描述',old?'旧项目概述':'',true));
+ if(['education','internship','project'].includes(group))node.append(period(`${group}[${i}].period`,old));
+ if(group==='project')node.append(row(`${group}[${i}].link`,'项目链接',old?'https://old.example/':''));
+ if(group==='works')node.append(row(`${group}[${i}].desc`,'描述','保留作品说明',true));
+ return node;
+}
+for(const group of Object.keys(titles)){
+ const container=document.createElement('div');container.className='createFormSection-container';
+ container.innerHTML=`<div class="createFormSection createFormSection-${group}"><div class="createFormSection-left"><div class="createFormSection-title"><p>${titles[group]}</p></div></div><div class="createFormSection-right"><div class="createFormSection-formList"></div><div class="formOperate-addBtn-container"><div class="formOperate-addBtn"><span class="addMore-add">添加</span></div></div></div></div>`;
+ const list=container.querySelector('.createFormSection-formList');list.append(entry(group,0,true));
+ container.querySelector('.addMore-add').addEventListener('click',()=>{window.addClicks[group]++;list.append(entry(group,list.children.length,false))});
+ document.getElementById('sections').append(container);
+}
+</script></html>

@@ -19,13 +19,14 @@ export function TabBar({
   badge?: number;
 }) {
   return (
-    <nav className="tabbar">
+    <nav className="tabbar" aria-label="主导航">
       {TABS.map((t) => (
         <button
           key={t.key}
           type="button"
           title={t.hint}
           className={`tabbar-item ${tab === t.key ? "active" : ""}`}
+          aria-current={tab === t.key ? "page" : undefined}
           onClick={() => onChange(t.key)}
         >
           {t.label}

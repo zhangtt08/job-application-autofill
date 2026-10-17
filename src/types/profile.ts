@@ -125,6 +125,7 @@ export interface CampusExperienceEntry {
 
 export interface ProjectEntry {
   name: string;
+  link?: string;
   role: string;
   startDate: string;
   endDate: string;

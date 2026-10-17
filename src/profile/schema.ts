@@ -215,6 +215,8 @@ function checkProjects(v: unknown, errors: string[]): ProjectEntry[] {
       if (val === undefined) (item as Record<string, unknown>)[k] = ""; // 旧版条目补默认
       else if (typeof val !== "string") errors.push(`projects[${i}].${k} 必须是 string`);
     }
+    if (item.link === undefined) item.link = "";
+    else if (typeof item.link !== "string") errors.push(`projects[${i}].link 必须是 string`);
     normalizeDescription(item as Record<string, unknown>, "projects", i, errors);
     normalizeVariants(item as Record<string, unknown>, "projects", i, errors);
     if (!Array.isArray(item.keywords)) errors.push(`projects[${i}].keywords 必须是数组`);

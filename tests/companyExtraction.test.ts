@@ -251,3 +251,11 @@ describe("Duplicate Detection with company update", () => {
     expect(dup?.id).toBe("job-1"); // URL 优先于 company+position
   });
 });
+
+
+describe("网申表单栏目不作为公司", () => {
+  it.each(["网申表单", "简历填写", "我的简历", "个人信息"])("%s 保持未识别", (title) => {
+    expect(extractCompanyWithMetadata(raw({ url: "https://app.mokahr.com/apply/test", pageTitle: title })).company).toBe("");
+    expect(extractCompanyWithMetadata(raw({ url: "https://example.com/apply", pageTitle: title })).company).toBe("");
+  });
+});

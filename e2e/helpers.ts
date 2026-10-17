@@ -36,11 +36,18 @@ function resolveChromeExecutable(): string | undefined {
 }
 
 /** 启动 Chromium Persistent Context 并加载 dist/ 扩展（真实 MV3 环境，不 mock） */
-export async function launchWithExtension(): Promise<{
+export async function launchWithExtension(distPath?: string): Promise<{
   context: BrowserContext;
   extensionId: string;
 }> {
-  const dist = path.resolve(__dirname, "../dist");
+  // 私人随包资料只供本人迁移；常规测试用独立代码副本，避免个人资料混入测试产物。
+  const testRoot = distPath ? undefined : fs.mkdtempSync(path.join(os.tmpdir(), 'afa-test-extension-'));
+  const dist = distPath ?? path.join(testRoot!, 'extension');
+  if (testRoot) {
+    fs.cpSync(path.resolve(__dirname, '../dist'), dist, { recursive: true });
+    fs.rmSync(path.join(dist,'profile-library.local.json'),{force:true});
+    fs.rmSync(path.join(dist,'profile-project-links.local.json'),{force:true});
+  }
   const executablePath = resolveChromeExecutable();
   const context = await chromium.launchPersistentContext("", {
     headless: true,
@@ -53,6 +60,10 @@ export async function launchWithExtension(): Promise<{
       "--no-default-browser-check",
       "--disable-features=Translate",
     ],
+  });
+  if (testRoot) context.once('close',()=>{
+    if (path.dirname(path.resolve(testRoot)) !== path.resolve(os.tmpdir()) || !path.basename(testRoot).startsWith('afa-test-extension-')) throw new Error('测试目录超出清理范围');
+    fs.rmSync(testRoot,{recursive:true,force:true});
   });
   let sw = context.serviceWorkers()[0];
   if (!sw) {

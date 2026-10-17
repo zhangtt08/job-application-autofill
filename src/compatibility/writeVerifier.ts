@@ -11,10 +11,13 @@ import {
   isCheckboxElement,
   isCustomSelectElement,
   isDatePickerElement,
+  isDisabled,
   isInputElement,
   isRadioElement,
   isSelectElement,
   isTextAreaElement,
+  fingerprintOf,
+  findElementByFingerprint,
   readDisplayValue,
   valueMatchesRequested,
   waitFor,
@@ -79,7 +82,7 @@ async function applyStrategy(el: HTMLElement, value: string, strategy: WriteStra
     case "checkbox":
       return setCheckboxValues(el, value);
     case "date-picker":
-      return setDatePickerValue(el as HTMLInputElement, value);
+      return setDatePickerValue(el, value);
     case "native-input":
     case "react-controlled":
       return writeNativeValue(el, value);
@@ -109,27 +112,32 @@ export async function fillWithVerification(
   previousValue: string,
 ): Promise<WriteVerifyResult> {
   const strategy = chooseStrategy(el);
+  if (isDisabled(el)) return { status: "unsupported", requestedValue, actualValue: readDisplayValue(el), strategy, attempts: 0, detail: "控件已禁用" };
   if (strategy === "unsupported") {
     return { status: "unsupported", requestedValue, actualValue: readDisplayValue(el), strategy, attempts: 0 };
   }
+  if (el.isContentEditable && el.closest('[aria-readonly="true"]')) return { status: 'unsupported', requestedValue, actualValue: readDisplayValue(el), strategy, attempts: 0, detail: '编辑器只读' };
+  const reference = fingerprintOf(el);
 
   const maxAttempts = 2;
   let actual = "";
   let detail: string | undefined;
   for (let i = 0; i < maxAttempts; i++) {
+    if (!el.isConnected) el = findElementByFingerprint(reference) ?? el;
     if (!el.isConnected) return { status: "mismatch", requestedValue, actualValue: "", strategy, attempts: i, detail: "页面重建了字段，请重新识别" };
     const res = await applyStrategy(el, requestedValue, strategy);
     detail = res.detail;
     // 策略内部已按各自的回显语义等过；这里再给框架一次统一的重绘窗口
     let stableSince = Date.now();
     const settled = await waitFor(() => {
+      if (!el.isConnected) el = findElementByFingerprint(reference) ?? el;
       if (!el.isConnected || !valueMatchesRequested(el, requestedValue)) {
         stableSince = Date.now();
         return false;
       }
       return Date.now() - stableSince >= 100;
     }, 350, 50);
-    if (settled) {
+    if (res.ok && settled) {
       return { status: "success", requestedValue, actualValue: readDisplayValue(el), strategy, attempts: i + 1 };
     }
     actual = readDisplayValue(el);

@@ -67,6 +67,28 @@ const SEMANTIC_SLOTS: string[][] = [
   ...DATE_SLOTS,
 ];
 
+const TEXT_SLOT_IDS = new Set([...SEMANTIC_SLOTS.slice(0, 5).flat(), "project.background"]);
+
+/** 可见字段名决定正文种类；短别名嵌在完整别名里时只取完整语义（职责描述 ≠ 描述）。 */
+function visibleTextSlot(signals: Signal[]): string[] {
+  for (const signal of signals.filter((s) => ["label", "aria", "placeholder", "prevSibling"].includes(s.source))) {
+    const hits: { slot: string; start: number; end: number }[] = [];
+    for (const id of TEXT_SLOT_IDS) {
+      for (const alias of FIELD_ALIASES[id] ?? []) {
+        const norm = normalizeText(alias);
+        if (!aliasIn(signal.text, norm)) continue;
+        const start = signal.text.indexOf(norm);
+        hits.push({ slot: id.split(".")[1]!, start, end: start + norm.length });
+      }
+    }
+    const slots = new Set(hits.filter((hit) => !hits.some((other) =>
+      other.start <= hit.start && other.end >= hit.end && other.end - other.start > hit.end - hit.start,
+    )).map((hit) => hit.slot));
+    if (slots.size) return [...slots];
+  }
+  return [];
+}
+
 /** 组判定顺序即优先级：校园/项目/教育标题更特异，先于 internship 的泛化词（经历/实践） */
 const GROUP_CHECK_ORDER = [
   "campus", "project", "education", "internship", "basic", "skills", "job", "content",
@@ -307,6 +329,11 @@ export function matchField(raw: RawField): MatchResult {
   const { context: ctx } = raw;
   const signals = buildSignals(ctx, raw.kind);
   const candidates = new Map<string, Candidate>();
+  const textSlots = visibleTextSlot(signals);
+  const explicitGroup = explicitExperienceGroupOf(ctx.labelText || ctx.ariaLabel || ctx.placeholder);
+  if (textSlots.length > 1) {
+    return { fieldId: "unknown", confidence: 0, matchedBy: "none", evidence: ["字段同时要求多类正文，请人工核对内容"] };
+  }
 
   const addCandidate = (
     fieldId: string,
@@ -322,6 +349,8 @@ export function matchField(raw: RawField): MatchResult {
 
   // Level 1 + 2：别名 × 信号源
   for (const [fieldId, aliases] of Object.entries(FIELD_ALIASES)) {
+    if (textSlots.length && TEXT_SLOT_IDS.has(fieldId) && !fieldId.endsWith(`.${textSlots[0]}`)) continue;
+    if (textSlots.length && explicitGroup && TEXT_SLOT_IDS.has(fieldId) && !fieldId.startsWith(`${explicitGroup}.`)) continue;
     for (const signal of signals) {
       for (const alias of aliases) {
         const aliasNorm = normalizeText(alias);
@@ -353,8 +382,7 @@ export function matchField(raw: RawField): MatchResult {
   // 信号文本自带组前缀（实习/项目/校园）时跳过——alias 已能精确归属，
   // 否则混合标题（如「经历与作品」）会把「实习描述」这类明确信号错转给其他组。
   if (ctx.sectionTitle) {
-    const signalText = `${ctx.labelText} ${ctx.ariaLabel} ${ctx.placeholder}`;
-    if (!explicitExperienceGroupOf(signalText)) {
+    if (!explicitGroup) {
       applySectionSlotTransfer(ctx.sectionTitle, candidates, addCandidate);
     }
   }
@@ -441,7 +469,7 @@ export function matchField(raw: RawField): MatchResult {
   }
 
   // 多候选接近 → UNKNOWN（宁可漏配，不可错配）
-  if (runnerUp && top.score - runnerUp.score < 0.06 && top.score < 0.92) {
+  if (runnerUp && top.score - runnerUp.score < 0.06 && (top.score < 0.92 || (TEXT_SLOT_IDS.has(top.fieldId) && TEXT_SLOT_IDS.has(runnerUp.fieldId)))) {
     /**
      * 但控件自己的声明优先于「放弃」：`<input type=email>` 配「电子邮箱地址」这种
      * 同时含「邮箱」和「地址」的标签，站点已经说明它是邮箱；直接判 unknown

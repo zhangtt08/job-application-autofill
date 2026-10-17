@@ -61,3 +61,8 @@ real-validation-results/**/*.png
 !.env.example
 
 *.exe
+
+# 本机一次性个人资料更新，不随代码提交
+public/profile-project-links.local.json
+public/profile-library.local.json
+网申助手迁移包.zip

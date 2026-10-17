@@ -260,6 +260,7 @@ export function FieldCard(props: FieldCardProps) {
   const isReviewEditable =
     (status === "need-confirm" || status === "ready" || status === "filled") && candidate.value?.editable === true;
   const displayValue = candidate.editedValue ?? candidate.value?.value ?? raw.context.currentValue ?? "";
+  const ValueEditor = raw.kind === "textarea" || /\.(description|responsibilities|workContent|achievements|summary|background)$/.test(match.fieldId) || match.fieldId.startsWith("content.") ? "textarea" : "input";
   const manualLike = status === "manual" || status === "unsupported";
   const sourceBadge = sourceBadgeText(candidate);
 
@@ -307,6 +308,7 @@ export function FieldCard(props: FieldCardProps) {
         className="field-card field-line"
         data-status={status}
         data-field-id={match.fieldId}
+        data-field-key={rawFieldKey(raw)}
         onClick={() => setExpanded(true)}
         aria-label={`展开这一项：${labelOf(raw)}`}
         title="点开查看 / 修改这一项"
@@ -322,7 +324,7 @@ export function FieldCard(props: FieldCardProps) {
   }
 
   return (
-    <div className={cardCls} data-status={status} data-field-id={match.fieldId}>
+    <div className={cardCls} data-status={status} data-field-id={match.fieldId} data-field-key={rawFieldKey(raw)}>
       <div className="field-head">
         <div className="field-label" title={raw.context.name || raw.context.id}>
           {labelOf(raw)}
@@ -373,7 +375,8 @@ export function FieldCard(props: FieldCardProps) {
         {!candidate.openAnswer && (
           <>
             {isReviewEditable ? (
-              <input
+              <ValueEditor
+                {...(ValueEditor === "textarea" ? { rows: 4 } : {})}
                 className="field-value value-input"
                 aria-label={`写入内容：${labelOf(raw)}`}
                 value={displayValue}
@@ -381,7 +384,7 @@ export function FieldCard(props: FieldCardProps) {
               />
             ) : (
               <div className={`field-value${displayValue ? "" : " value-empty"}`}>
-                {status === "empty" ? "资料库里未找到可用内容，请人工填写" : displayValue || "—"}
+                {status === "empty" ? "资料库暂无对应内容" : displayValue || "—"}
               </div>
             )}
 
@@ -463,7 +466,7 @@ export function FieldCard(props: FieldCardProps) {
           </button>
         )}
         <button className="btn-sm" onClick={() => props.onLocate(rawFieldKey(raw))}>
-          定位字段
+          定位
         </button>
         {status === "ignored" ? (
           /* 跳过得能撤销：否则用户点错一下「忽略」，唯一的出路就是整页重新识别 */
@@ -479,22 +482,23 @@ export function FieldCard(props: FieldCardProps) {
         ) : (
           status !== "filled" && (
             <button className="btn-sm" onClick={() => props.onIgnore(rawFieldKey(raw))}>
-              忽略这一项
+              忽略
             </button>
           )
         )}
         {canBlockOnSite && (
-          /* 逐字段出口之三：不只是「这次跳过」——同一站点每次都有一栏不想让它碰，
-             说一次就记住，下次扫描直接跳过这一栏（设置页可撤销）。 */
-          <button
+          <details className="field-more">
+            <summary>更多</summary>
+            <button
             type="button"
             className="btn-sm"
             data-action="block-on-site"
             title={`以后在 ${props.siteHost} 上都不自动填这一栏`}
             onClick={() => props.onBlockOnSite?.(rawFieldKey(raw))}
           >
-            这一站以后都别填
-          </button>
+              此站不填
+            </button>
+          </details>
         )}
         {status === "filled" && candidate.editedValue != null && (
           /* 改过值又已经填过一次：必须给出「把新值再写进去」的入口，否则改动只活在侧边栏里 */

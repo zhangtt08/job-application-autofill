@@ -20,9 +20,15 @@ export interface ScanPageMsg {
   type: "SCAN_PAGE";
 }
 
+export type ExperienceGroup = "basic" | "education" | "internship" | "campus" | "project";
+
 export interface ScanPageResult {
   ok: boolean;
   fields?: RawField[];
+  canAddInternships?: boolean;
+  internshipAddFrameIds?: number[];
+  expandableGroups?: ExperienceGroup[];
+  experienceAddFrames?: Partial<Record<ExperienceGroup, number[]>>;
   error?: string;
   /** Stage 6：页面环境摘要（Pilot 兼容性记录用） */
   environment?: {
@@ -45,6 +51,8 @@ export interface FillItem {
   contextEligible?: boolean;
   /** 控件所在 frame（跨域 iframe 表单）；缺省 = 主框架 */
   frameId?: number;
+  /** 拆分日期的原子写入组；任一部分失败时恢复整组。 */
+  writeGroup?: string;
 }
 
 /**
@@ -124,8 +132,22 @@ export interface PageMutatedMsg {
   url: string;
 }
 
+export interface EnsureInternshipsMsg {
+  type: "ENSURE_INTERNSHIPS";
+  count: number;
+  group?: ExperienceGroup;
+}
+
+export interface EnsureInternshipsResult {
+  ok: boolean;
+  added: number;
+  detail?: string;
+  error?: string;
+}
+
 export type SidePanelToContentMsg =
   | ScanPageMsg
+  | EnsureInternshipsMsg
   | FillFieldsMsg
   | UndoMsg
   | LocateFieldMsg
@@ -165,10 +187,22 @@ export interface LocateTargetMsg {
 
 export interface CaptureTargetMsg {
   type: "CAPTURE_TARGET";
+  expectedUrl?: string;
+  expectedTabId?: number;
+}
+
+export interface EnsureInternshipsTargetMsg {
+  type: "ENSURE_INTERNSHIPS_TARGET";
+  count: number;
+  group?: ExperienceGroup;
+  frameId: number;
+  expectedUrl: string;
+  expectedTabId: number;
 }
 
 export type SidePanelToBackgroundMsg =
   | EnsureContentScriptMsg
+  | EnsureInternshipsTargetMsg
   | ScanTargetMsg
   | FillTargetMsg
   | UndoTargetMsg

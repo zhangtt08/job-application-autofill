@@ -6,6 +6,7 @@ import type {
   FillFieldsResult,
   UndoResult,
   CaptureJobResult,
+  EnsureInternshipsResult,
 } from "../types/message";
 import type { RawField, FillOutcome } from "../types/field";
 import { logger } from "../utils/logger";
@@ -174,6 +175,8 @@ async function ensureReady(): Promise<ReadyState> {
 async function scanAllFrames(tabId: number): Promise<ScanPageResult> {
   const frames = await listFrames(tabId);
   const fields: RawField[] = [];
+  const internshipAddFrameIds: number[] = [];
+  const experienceAddFrames: NonNullable<ScanPageResult["experienceAddFrames"]> = {};
   const unreachable: number[] = [];
   let environment: ScanPageResult["environment"] | undefined;
 
@@ -188,10 +191,12 @@ async function scanAllFrames(tabId: number): Promise<ScanPageResult> {
     const res = await toContent<ScanPageResult>(tabId, frame.frameId, { type: "SCAN_PAGE" });
     if (!res?.ok) continue;
     for (const f of res.fields ?? []) fields.push({ ...f, frameId: frame.frameId });
+    if (res.canAddInternships) internshipAddFrameIds.push(frame.frameId);
+    for (const group of res.expandableGroups ?? []) (experienceAddFrames[group] ??= []).push(frame.frameId);
     if (frame.frameId === 0) environment = res.environment;
   }
 
-  return { ok: true, fields, environment };
+  return { ok: true, fields, environment, internshipAddFrameIds, experienceAddFrames };
 }
 
 /** 填写：按 frameId 分组下发子计划，再合并结果（每个 frame 只知道自己的 DOM） */
@@ -276,6 +281,7 @@ interface ReadyState {
 const TAB_BOUND_TYPES = new Set<string>([
   "ENSURE_CONTENT_SCRIPT",
   "SCAN_TARGET",
+  "ENSURE_INTERNSHIPS_TARGET",
   "FILL_TARGET",
   "UNDO_TARGET",
   "LOCATE_TARGET",
@@ -288,6 +294,8 @@ const TAB_BOUND_TYPES = new Set<string>([
  */
 function rejectionFor(msg: RuntimeMessage): unknown {
   switch (msg.type) {
+    case "ENSURE_INTERNSHIPS_TARGET":
+      return { ok: false, added: 0, error: UNTRUSTED_SENDER };
     case "SCAN_TARGET":
       return { ok: false, fields: [], error: UNTRUSTED_SENDER } satisfies ScanPageResult;
     case "FILL_TARGET":
@@ -363,6 +371,13 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender: SenderLike, s
         );
         if (!target.ok) return target.response;
         return await scanAllFrames(target.tabId);
+      }
+      case "ENSURE_INTERNSHIPS_TARGET": {
+        const target = await resolveTarget(() => ({ ok: false, added: 0, error: "无法连接页面" }));
+        if (!target.ok) return target.response;
+        if (!Number.isSafeInteger(msg.frameId) || msg.frameId < 0) return { ok: false, added: 0, error: "框架编号无效" };
+        return await toContent<EnsureInternshipsResult>(target.tabId, msg.frameId, { type: "ENSURE_INTERNSHIPS", count: msg.count, ...(msg.group ? { group: msg.group } : {}) })
+          ?? { ok: false, added: 0, error: "无法添加实习栏，请手动补齐后重新识别。" };
       }
       case "FILL_TARGET": {
         const target = await resolveTarget(() => ({ ok: false, outcomes: [], originals: [], error: "无法连接页面" }) satisfies FillFieldsResult);

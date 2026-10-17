@@ -350,6 +350,24 @@ function coerceStore(raw: unknown): ProfileStore | null {
   };
 }
 
+/** 迁移必须整库有效，不能用读盘修复把半份数据悄悄变成空字段。 */
+export function validateProfileStore(raw: unknown): ProfileStore {
+  const store = rec(raw);
+  if (store.schemaVersion !== 2 || !Array.isArray(store.libraries) || !store.libraries.length || !store.shared) throw new Error('资料库迁移文件格式无效');
+  const ids = new Set<string>();
+  const {basic,education,sensitive} = rec(store.shared);
+  for (const item of store.libraries) {
+    const library = rec(item);
+    if (typeof library.id !== 'string' || !library.id || ids.has(library.id) || typeof library.name !== 'string' ||
+        typeof library.note !== 'string' || typeof library.createdAt !== 'string' || typeof library.updatedAt !== 'string' ||
+        !Array.isArray(library.directions) || library.directions.some(direction => !PROFILE_TYPES.includes(direction as ProfileType)) ||
+        !validateProfile({...rec(library.content),basic,education,sensitive}).ok) throw new Error('资料库迁移文件包含无效资料');
+    ids.add(library.id);
+  }
+  if (typeof store.activeLibraryId !== 'string' || !ids.has(store.activeLibraryId)) throw new Error('迁移文件的当前资料库不存在');
+  return structuredClone(raw) as ProfileStore;
+}
+
 /** 单库时代的 Profile → v2 store（一个「默认资料库」，覆盖全部方向） */
 export function migrateFromLegacyProfile(raw: unknown): ProfileStore {
   const validated = validateProfile(raw);
@@ -379,12 +397,73 @@ export function getStoreLoadProblem(): string | null {
 
 const CORRUPT_BACKUP_KEY = "afa.profiles.v2.corrupt";
 
+async function restoreBundledStore(original: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (original[STORE_KEY] != null || original[LEGACY_KEY] != null || !chrome.runtime?.getURL) return original;
+  const response = await fetch(chrome.runtime.getURL('profile-library.local.json'));
+  if (response.status === 404) return original;
+  if (!response.ok) throw new Error('随包资料库读取失败');
+  const pack = rec(await response.json());
+  if (pack.kind !== 'application-form-assistant/libraries' || pack.version !== 1) throw new Error('随包资料库格式无效');
+  const store = validateProfileStore(pack.store);
+  const current = await chrome.storage.local.get([STORE_KEY, LEGACY_KEY]);
+  if (current[STORE_KEY] != null || current[LEGACY_KEY] != null) return current;
+  await saveStore(store);
+  return chrome.storage.local.get([STORE_KEY, LEGACY_KEY]);
+}
+
+async function clearObsoleteProfileBackups(raw: unknown): Promise<void> {
+  try {
+    validateProfileStore(raw);
+    const stored = await chrome.storage.local.get(null);
+    const keys = Object.keys(stored).filter(key => /^afa\.profiles\.backup\.ztt\.\d+$/.test(key) || /^afa\.project-links\.backup\.[a-z0-9-]+$/.test(key));
+    if (keys.length) await chrome.storage.local.remove(keys);
+  } catch { /* 正式资料异常或清理失败时保留旧备份，不阻断使用。 */ }
+}
+
+/** 本机随扩展附带的一次性数据更新；应用前保留原始两份存储，之后不再覆盖手动修改。 */
+async function applyBundledProjectLinks(original: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (!chrome.runtime?.getURL) return original;
+  const response = await fetch(chrome.runtime.getURL("profile-project-links.local.json"));
+  if (!response.ok) return original;
+  const patch = rec(await response.json());
+  if (typeof patch.id !== "string" || !/^[a-z0-9-]{1,80}$/.test(patch.id) ||
+      typeof patch.ownerName !== "string" || typeof patch.link !== "string" || !/^https?:\/\//i.test(patch.link)) return original;
+  const key = `afa.project-links.applied.${patch.id}`;
+  const current = await chrome.storage.local.get([STORE_KEY, LEGACY_KEY, key]);
+  original = { ...current };
+  delete original[key];
+  if (current[key]) return original;
+  const stored = rec(original[STORE_KEY]);
+  if (rec(rec(stored.shared).basic).name !== patch.ownerName || !Array.isArray(stored.libraries)) return original;
+  // 验证完整存储后再处理，不能用修复后的对象覆盖其他原始字段。
+  if (!coerceStore(stored)) return original;
+  const updated = structuredClone(stored) as unknown as ProfileStore;
+  for (const library of updated.libraries) {
+    if (!Array.isArray(library.content.projects) ||
+        !validateProfile(structuredClone({...updated.shared,...library.content})).ok) return original;
+    for (const project of library.content.projects) project.link = patch.link;
+  }
+  const active = updated.libraries.find(library => library.id === updated.activeLibraryId);
+  if (!active) return original;
+  const mirror = assembleProfile(updated.shared, active.content);
+  await chrome.storage.local.set({
+    [`afa.project-links.backup.${patch.id}`]: original,
+    [STORE_KEY]: updated, [LEGACY_KEY]: mirror, [key]: true,
+  });
+  return { [STORE_KEY]: updated, [LEGACY_KEY]: mirror };
+}
+
 export async function loadStore(): Promise<ProfileStore> {
   if (!storageAvailable()) return createDefaultStore();
   try {
-    const result = await chrome.storage.local.get([STORE_KEY, LEGACY_KEY]);
+    let result = await chrome.storage.local.get([STORE_KEY, LEGACY_KEY]);
+    try { result = await restoreBundledStore(result); }
+    catch { loadProblem = '随包资料库无法恢复，现有资料未被覆盖。请检查迁移文件是否完整。'; }
+    try { result = await applyBundledProjectLinks(result); }
+    catch (err) { logger.error("项目链接更新未完成，保留原资料", err); }
     const v2 = coerceStore(result[STORE_KEY]);
     if (v2) {
+      await clearObsoleteProfileBackups(result[STORE_KEY]);
       loadProblem = null;
       return v2;
     }

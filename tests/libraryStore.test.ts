@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Profile } from "../src/types/profile";
 import { cloneProfile, defaultProfile } from "../src/profile/defaultProfile";
 import { validateProfile } from "../src/profile/schema";
@@ -57,8 +57,8 @@ function stubChrome(initial: Record<string, unknown> = {}): ChromeStub {
           }
           for (const fn of listeners.slice()) fn(changes, "local");
         },
-        remove: async (k: string) => {
-          delete stub.data[k];
+        remove: async (keys: string | string[]) => {
+          for (const key of typeof keys === 'string' ? [keys] : keys) delete stub.data[key];
         },
       },
       onChanged: {
@@ -420,5 +420,35 @@ describe("emptyContent", () => {
     expect(content.skills.technical).toEqual([]);
     const result = validateProfile(assembleProfile(splitProfile(makeProfile()).shared, content));
     expect(result.ok).toBe(true);
+  });
+});
+
+
+describe("本机项目链接一次性更新", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("只更新项目链接，清理旧备份但保留当前库和其他信息；再次打开不覆盖编辑", async () => {
+    const store = migrateFromLegacyProfile(makeProfile());
+    store.libraries.push(createLibrary({name:"第二库",content:store.libraries[0]!.content}));
+    const original = structuredClone(store);
+    const stub = stubChrome({[STORE_KEY]:store,[LEGACY_KEY]:makeProfile()});
+    (chrome as unknown as {runtime:unknown}).runtime = {getURL:(path:string)=>`chrome-extension://test/${path}`};
+    vi.stubGlobal("fetch",vi.fn(async()=>({ok:true,json:async()=>({id:"test-project-links",ownerName:"张小明",link:"https://example.com/"})})));
+    const loaded = await loadStore();
+    for(const library of loaded.libraries)expect(library.content.projects.every(p=>p.link==="https://example.com/")).toBe(true);
+    expect(stub.data["afa.project-links.backup.test-project-links"]).toBeUndefined();
+    const saved = structuredClone(stub.data[STORE_KEY]) as ProfileStore;
+    for(let i=0;i<saved.libraries.length;i++)for(let j=0;j<saved.libraries[i]!.content.projects.length;j++)saved.libraries[i]!.content.projects[j]!.link=original.libraries[i]!.content.projects[j]!.link;
+    expect(saved).toEqual(original);
+    (stub.data[STORE_KEY] as ProfileStore).libraries[0]!.content.projects[0]!.link="https://edited.example/";
+    const writes = stub.writes;
+    expect((await loadStore()).libraries[0]!.content.projects[0]!.link).toBe("https://edited.example/");
+    expect(stub.writes).toBe(writes);
+  });
+  it.each(["其他用户","unsafe-url"])("不匹配或无效更新 %s 保留资料",async mode=>{
+    const store = migrateFromLegacyProfile(makeProfile());
+    const stub = stubChrome({[STORE_KEY]:store});
+    (chrome as unknown as {runtime:unknown}).runtime={getURL:(path:string)=>path};
+    vi.stubGlobal("fetch",vi.fn(async()=>({ok:true,json:async()=>({id:"test",ownerName:mode==="其他用户"?"别人的名字":"张小明",link:mode==="unsafe-url"?"javascript:alert(1)":"https://example.com/"})})));
+    await loadStore();expect(stub.writes).toBe(0);expect(stub.data[STORE_KEY]).toEqual(store);
   });
 });

@@ -1,4 +1,10 @@
 import { describe, expect, it } from "vitest";
+
+it("明确命名的项目正文保留原文，缺失内容不从其他正文借用", () => {
+  const r = mapResumeJsonToProfile({ 项目经历: [{ 项目名称: "测试项目", 项目描述: "描述原文", 项目概述: "概述原文", 项目职责: ["职责原文"], workContent: "内容原文", 项目背景: "背景原文" }] });
+  if (!r.ok) throw new Error("should map");
+  expect(r.profile.projects[0]).toMatchObject({ description: "描述原文", summary: "概述原文", responsibilities: "职责原文", workContent: "内容原文", background: "背景原文" });
+});
 import { mapResumeJsonToProfile } from "../src/profile/importMapper";
 import { validateProfile } from "../src/profile/schema";
 
@@ -117,10 +123,7 @@ describe("mapResumeJsonToProfile", () => {
     if (!mapped.ok) throw new Error("should map");
     const job = mapped.profile.internships[0]!;
     expect(job.company).toBe("示例科技有限公司");
-    expect(job.description).toContain("【工作职责】");
-    expect(job.description).toContain("【工作内容】");
-    expect(job.description).toContain("【主要业绩】");
-    expect(job.description).toContain("【概述】");
+    expect(job.description).toBe("");
   });
 
   it("语义槽位：职责/内容/业绩/总结/背景 各自独立落位，不再只拼进 description", () => {
@@ -148,8 +151,7 @@ describe("mapResumeJsonToProfile", () => {
     expect(p.role).toBe("业务方案设计、Agent工作流设计");
     expect(p.keywords).toContain("示例业务项目｜AI应用开发");
     expect(p.keywords).toContain("业务方案设计");
-    expect(p.description).toContain("【项目背景】");
-    expect(p.description).toContain("【核心功能】");
+    expect(p.description).toBe("");
   });
 
   it("skills：简历分组归并入 technical/tools/certificates", () => {
@@ -221,7 +223,7 @@ describe("mapResumeJsonToProfile", () => {
     expect(cp.department).toBe("宣传部");
     expect(cp.position).toBe("干事");
     expect(cp.startDate).toBe("2023.09");
-    expect(cp.description).toContain("【工作职责】");
+    expect(cp.description).toBe("");
     expect(cp.responsibilities).toBe("志愿活动摄影\n公众号内容制作");
     expect(cp.summary).toBe("积累校园宣传经验");
   });
@@ -519,4 +521,10 @@ describe("界面标签风格（issue：照界面的词写 JSON 必须能导入�
     expect(again.ok).toBe(true);
     if (again.ok) expect(again.profile.basic.name).toBe("张三");
   });
+});
+
+it("每个项目导入自己的链接，不能借用作品集",()=>{
+ const result=mapResumeJsonToProfile({basic_info:{name:"测试",portfolio:"https://portfolio.example/"},项目经历:[{项目名称:"项目甲",项目链接:"https://a.example/"},{项目名称:"项目乙",url:"https://b.example/"},{项目名称:"项目丙"}]});
+ if(!result.ok)throw Error(result.errors.join(";"));
+ expect(result.profile.projects.map(p=>p.link)).toEqual(["https://a.example/","https://b.example/",""]);
 });

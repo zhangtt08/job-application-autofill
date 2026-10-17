@@ -156,7 +156,7 @@ export function resolveValue(
     const key = fieldId.slice("internship.".length) as keyof typeof entry;
     const value = entry[key];
     if (typeof value !== "string" || value === "") return undefined; // variants 等非文本字段不填
-    return { fieldId, value, variant: "plain", editable: false, entryIndex: entryIdx, entryCount: profile.internships.length };
+    return { fieldId, value, variant: "plain", editable: ["background", "responsibilities", "workContent", "achievements", "summary"].includes(key), sourceType: "default", sourcePath: `internships[${entryIdx}].${key}`, entryIndex: entryIdx, entryCount: profile.internships.length };
   }
 
   // campus.*（校园经历，结构与 internship 一致）
@@ -184,7 +184,7 @@ export function resolveValue(
     const key = fieldId.slice("campus.".length) as keyof typeof entry;
     const value = entry[key];
     if (typeof value !== "string" || value === "") return undefined; // variants 等非文本字段不填
-    return { fieldId, value, variant: "plain", editable: false, entryIndex: entryIdx, entryCount: profile.campus.length };
+    return { fieldId, value, variant: "plain", editable: ["background", "responsibilities", "workContent", "achievements", "summary"].includes(key), sourceType: "default", sourcePath: `campus[${entryIdx}].${key}`, entryIndex: entryIdx, entryCount: profile.campus.length };
   }
 
   // project.*
@@ -212,7 +212,7 @@ export function resolveValue(
     const key = fieldId.slice("project.".length) as keyof typeof entry;
     const value = entry[key];
     if (typeof value !== "string" || value === "") return undefined; // keywords 等非文本字段不填
-    return { fieldId, value, variant: "plain", editable: false, entryIndex: entryIdx, entryCount: profile.projects.length };
+    return { fieldId, value, variant: "plain", editable: ["background", "responsibilities", "workContent", "achievements", "summary"].includes(key), sourceType: "default", sourcePath: `projects[${entryIdx}].${key}`, entryIndex: entryIdx, entryCount: profile.projects.length };
   }
 
   // skills.*

@@ -13,16 +13,23 @@ import {
   htmlForLabel,
   isCheckboxElement,
   isInputElement,
+  isPeriodDateElement,
+  isDatePickerElement,
+  isDisabled,
+  isVisible,
   isRadioElement,
   isSelectElement,
   isTextAreaElement,
+  isUsableChoice,
   normalizeChoice,
   normalizeDate,
   polarityMatches,
   readDisplayValue,
+  queryAllOpenRoots,
   valueMatchesRequested,
   waitFor,
 } from "./domUtils";
+import { dateChoiceNumber, datePartFromHint, type DatePart } from '../utils/dateChoice';
 
 export interface SetTextResult {
   ok: boolean;
@@ -44,7 +51,7 @@ function nativeValueSetter(el: HTMLElement): ((v: string) => void) | null {
 }
 
 function fire(el: HTMLElement, Ctor: new (type: string, init?: object) => Event, type: string, init?: object): void {
-  el.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, ...init } as EventInit));
+  el.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, composed: true, ...init } as EventInit));
 }
 
 /**
@@ -54,7 +61,7 @@ function fire(el: HTMLElement, Ctor: new (type: string, init?: object) => Event,
 export function writeNativeValue(el: HTMLElement, value: string): SetTextResult {
   const input = isInputElement(el) || isTextAreaElement(el) ? el : null;
   if (!input) return { ok: false, detail: "不是可写入的文本控件" };
-  if (input.disabled) return { ok: false, detail: "控件 disabled" };
+  if (isDisabled(input)) return { ok: false, detail: "控件 disabled" };
   // 只读文本框是站点自己管的（比如自动计算项）；日期/下拉触发器走各自的点击路径
   if (input.readOnly) return { ok: false, detail: "控件 readonly" };
 
@@ -74,18 +81,33 @@ export function writeNativeValue(el: HTMLElement, value: string): SetTextResult 
   }
 }
 
-/** contenteditable 写入：textContent → input/change（框架按 input 事件同步 state） */
+/** 优先使用浏览器编辑命令，让富文本编辑器接收真实编辑事件并保留换行。 */
 export function setContentEditableText(el: HTMLElement, value: string): SetTextResult {
+  if (el.closest('[aria-readonly="true"]')) return { ok: false, detail: '编辑器只读' };
+  if (isDisabled(el)) return { ok: false, detail: "控件 disabled" };
   if (el.isContentEditable !== true) return { ok: false, detail: "不是可编辑区域" };
   try {
     el.focus();
     fire(el, FocusEvent, "focus");
-    el.textContent = value;
+    const doc = el.ownerDocument;
+    const selection = doc.getSelection();
+    const range = doc.createRange();
+    range.selectNodeContents(el);
+    selection?.removeAllRanges(); selection?.addRange(range);
+    if (typeof doc.execCommand === 'function') {
+      const multiline = value.includes('\n') && el.getAttribute('contenteditable') !== 'plaintext-only';
+      const escaped = doc.createElement('span'); escaped.textContent = value;
+      // insertText 会把换行变成段落并额外插入空行，转义后的 br 保留原文行距。
+      if (!doc.execCommand(multiline ? 'insertHTML' : 'insertText', false, multiline ? escaped.innerHTML.replace(/\r?\n/g, '<br>') : value)) {
+        el.blur();
+        return { ok: false, detail: '编辑器拒绝了文本替换', actual: readDisplayValue(el) };
+      }
+    } else el.textContent = value;
     fire(el, InputEvent, "input", { inputType: "insertText", data: value });
     fire(el, Event, "change");
     el.blur();
     fire(el, FocusEvent, "blur");
-    return { ok: true, actual: (el.textContent ?? "").trim() };
+    return { ok: true, actual: readDisplayValue(el) };
   } catch (err) {
     return { ok: false, detail: String(err) };
   }
@@ -96,26 +118,33 @@ export function setContentEditableText(el: HTMLElement, value: string): SetTextR
  * 只改 selected 再派发 change，绝不 click 选项（原生下拉点不开）。
  */
 export async function setSelectValue(el: HTMLSelectElement, value: string): Promise<SetTextResult> {
-  if (el.disabled) return { ok: false, detail: "控件 disabled" };
+  if (isDisabled(el)) return { ok: false, detail: "控件 disabled" };
   const wanted = value.trim();
-  const norm = normalizeChoice(wanted);
-  const byValue = Array.from(el.options).find((o) => o.value === wanted);
-  const byText = Array.from(el.options).find((o) => normalizeChoice(o.textContent ?? "") === norm);
-  // 「是/否」答案 vs 「可以接受 / 不接受」选项：同极性精确写法，放在包含式匹配之前
-  // （包含式会把「不接受」当成「接受」，那是填错位置而不是少填）
-  const byPolarity = Array.from(el.options).find(
-    (o) => polarityMatches(wanted, o.textContent ?? "") || polarityMatches(wanted, o.value ?? ""),
-  );
-  const byPartial = Array.from(el.options).filter((o) => {
-    const t = normalizeChoice(o.textContent ?? "");
-    return t.length > 1 && (t.includes(norm) || norm.includes(t));
-  });
-  const target = byValue ?? byText ?? byPolarity ?? (byPartial.length === 1 ? byPartial[0] : undefined);
-  if (!target) return { ok: false, detail: `select 中没有匹配选项: ${wanted.slice(0, 20)}` };
+  const terms = el.multiple ? [...new Set(wanted.split(/[、\n;；]+/).map(term => term.trim()).filter(Boolean))] : [wanted];
+  const targets: HTMLOptionElement[] = [];
+  const options = Array.from(el.options).filter(o => !isDisabled(o));
+  for (const term of terms) {
+    const norm = normalizeChoice(term);
+    const byValue = options.find((o) => o.value === term);
+    const byText = options.find((o) => normalizeChoice(o.textContent ?? "") === norm);
+    // 同极性匹配先于包含匹配，避免把「不接受」当作「接受」。
+    const byPolarity = options.find(
+      (o) => polarityMatches(term, o.textContent ?? "") || polarityMatches(term, o.value ?? ""),
+    );
+    const byPartial = options.filter((o) => {
+      const t = normalizeChoice(o.textContent ?? "");
+      return t.length > 1 && (t.includes(norm) || norm.includes(t));
+    });
+    const target = byValue ?? byText ?? byPolarity ?? (byPartial.length === 1 ? byPartial[0] : undefined);
+    if (!target) return { ok: false, detail: `select 中没有匹配选项: ${term.slice(0, 20)}` };
+    targets.push(target);
+  }
+  if (new Set(targets).size !== targets.length) return { ok: false, detail: '多个资料词对应同一选项，保留原值' };
+  if (Array.from(el.options).some(option => isDisabled(option) && option.selected !== targets.includes(option))) return { ok: false, detail: '选项已禁用，无法完整覆盖' };
 
   try {
     el.focus();
-    Array.from(el.options).forEach((o) => (o.selected = o === target));
+    Array.from(el.options).forEach((o) => (o.selected = targets.includes(o)));
     fire(el, Event, "input");
     fire(el, Event, "change");
     el.blur();
@@ -133,7 +162,8 @@ export async function setSelectValue(el: HTMLSelectElement, value: string): Prom
 /** radio 组写入：按 value / label / aria-label 归一化匹配 */
 export async function setRadioValue(el: HTMLInputElement, value: string): Promise<SetTextResult> {
   if (!isRadioElement(el)) return { ok: false, detail: "不是 radio 控件" };
-  const group = getRadioGroup(el);
+  const group = getRadioGroup(el).filter(isUsableChoice);
+  if (isDisabled(el)) return { ok: false, detail: "控件 disabled" };
   const norm = normalizeChoice(value);
   const choice =
     group.find((item) =>
@@ -147,9 +177,9 @@ export async function setRadioValue(el: HTMLInputElement, value: string): Promis
       ),
     );
   if (!choice) return { ok: false, detail: `radio 中没有匹配选项: ${value}` };
+  if (isDisabled(choice)) return { ok: false, detail: "选项已禁用" };
   try {
     choice.click();
-    if (!choice.checked) choice.checked = true;
     fire(choice, Event, "input");
     fire(choice, Event, "change");
   } catch (err) {
@@ -176,18 +206,18 @@ export async function setCheckboxValues(el: HTMLElement, value: string): Promise
   const picked: HTMLInputElement[] = [];
   const missing: string[] = [];
   for (const term of terms) {
-    const exact = group.find((item) =>
+    const exact = group.filter(isUsableChoice).find((item) =>
       [item.value, htmlForLabel(item), item.getAttribute("aria-label") ?? ""].some((t) => normalizeChoice(t) === term),
     );
     // 「是/否」答案的同极性写法优先于包含式匹配（包含式会把「不接受」当成「接受」）
     const samePolarity = exact
       ? undefined
-      : group.find((item) =>
+      : group.filter(isUsableChoice).find((item) =>
           [item.value, htmlForLabel(item), item.getAttribute("aria-label") ?? ""].some((t) => polarityMatches(term, t)),
         );
     const partial = exact || samePolarity
       ? undefined
-      : group.filter((item) => {
+      : group.filter(isUsableChoice).filter((item) => {
           const t = normalizeChoice(htmlForLabel(item) || item.value || "");
           return t.length > 1 && (t.includes(term) || term.includes(t));
         });
@@ -198,23 +228,33 @@ export async function setCheckboxValues(el: HTMLElement, value: string): Promise
   if (picked.length === 0 || missing.length > 0) {
     return { ok: false, detail: `checkbox 中没有匹配选项: ${value.slice(0, 24)}` };
   }
-  if (group.some((item) => item.disabled && item.checked !== picked.includes(item))) return { ok: false, detail: "选项已禁用" };
+  if (group.some((item) => !isUsableChoice(item) && item.checked !== picked.includes(item))) return { ok: false, detail: "隐藏或禁用的选项阻止完整覆盖" };
+  const previous = group.map(item => item.checked);
+  let writeError: string | undefined;
   try {
     for (const item of group) {
       const wanted = picked.includes(item);
       if (item.checked === wanted) continue;
       item.click();
-      if (item.checked !== wanted) item.checked = wanted;
       fire(item, Event, "input");
       fire(item, Event, "change");
     }
   } catch (err) {
-    return { ok: false, detail: String(err) };
+    writeError = String(err);
   }
-  const settled = await waitFor(() => group.every((item) => item.checked === picked.includes(item)), 300, 40);
-  return settled
-    ? { ok: true, actual: readDisplayValue(el) }
-    : { ok: false, detail: "checkbox 勾选未生效" };
+  const settled = !writeError && await waitFor(() => group.every((item) => item.isConnected && item.checked === picked.includes(item)), 300, 40);
+  if (settled) return { ok: true, actual: readDisplayValue(el) };
+  try {
+    for (let index = 0; index < group.length; index++) {
+      const item = group[index]!;
+      if (!item.isConnected || item.checked === previous[index] || !isUsableChoice(item)) continue;
+      item.click();
+      fire(item, Event, "input");
+      fire(item, Event, "change");
+    }
+  } catch (err) { return { ok: false, detail: `checkbox 恢复原选择失败，请手动核对：${String(err)}` }; }
+  const restored = await waitFor(() => group.every((item, index) => item.isConnected && item.checked === previous[index]), 300, 40);
+  return { ok: false, detail: restored ? 'checkbox 勾选未生效，已恢复原选择' : 'checkbox 勾选未生效，恢复原选择未完成，请手动核对' };
 }
 
 /** 找到自定义下拉真正可点击的触发器（readonly input 的点击常常不弹窗） */
@@ -251,20 +291,18 @@ function selectTriggerOf(el: HTMLElement): HTMLElement {
 }
 
 /** 弹层里的候选项（各 UI 库的公共并集，只做可见性过滤） */
-function popupOptions(doc: Document): HTMLElement[] {
+function popupOptions(root: Document | ShadowRoot | Element): HTMLElement[] {
   const selector =
     '[role="option"], [role="listbox"] li, [role="menuitem"], [class*="select"] li, [class*="dropdown"] li, ' +
     '[class*="select-item"], [class*="select-option"], [class*="select-dropdown__item"], [class*="dropdown__item"], ' +
     '[class*="option"], [class*="cascader"] [class*="node"], [class*="picker-item"], [class*="menu-item"], ' +
     '[data-value]:not([data-value=""]), [data-key]:not([data-key=""])';
-  return Array.from(doc.querySelectorAll(selector)).filter((node) => {
-    const view = node.ownerDocument?.defaultView ?? window;
-    const style = view.getComputedStyle(node);
-    if (style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity || "1") === 0) return false;
+  return queryAllOpenRoots<HTMLElement>(root, selector).filter((node) => {
+    if (!isVisible(node) || isDisabled(node) || node.matches('[disabled],.disabled,.is-disabled,.ant-select-item-option-disabled,.el-select-dropdown__item.is-disabled')) return false;
     const rect = (node as HTMLElement).getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return false;
     return !node.closest('[aria-hidden="true"]');
-  }) as HTMLElement[];
+  });
 }
 
 /**
@@ -290,19 +328,25 @@ function rankPopupOptions(options: HTMLElement[], trigger: Element, before: Set<
   });
 }
 
-function chooseOption(options: HTMLElement[], target: string): HTMLElement | undefined {
+function chooseOption(options: HTMLElement[], target: string, datePart?: DatePart): HTMLElement | undefined {
+  options = options.filter(node => !options.some(child => child !== node && node.contains(child)));
   const norm = normalizeChoice(target);
-  const exact = options.find((node) => normalizeChoice(node.textContent ?? "") === norm);
-  if (exact) return exact;
-  const byTitle = options.find((node) => normalizeChoice(node.getAttribute("title") ?? "") === norm);
-  if (byTitle) return byTitle;
+  const exact = options.filter((node) => normalizeChoice(node.textContent ?? "") === norm);
+  if (exact.length) return exact.length === 1 ? exact[0] : undefined;
+  const byTitle = options.filter((node) => normalizeChoice(node.getAttribute("title") ?? "") === norm);
+  if (byTitle.length) return byTitle.length === 1 ? byTitle[0] : undefined;
+  const dateNumber = datePart ? dateChoiceNumber(target, datePart) : undefined;
+  if (datePart && dateNumber !== undefined) {
+    const dates = options.filter(node => dateChoiceNumber(node.textContent ?? '', datePart) === dateNumber);
+    return dates.length === 1 ? dates[0] : undefined;
+  }
   // 「是/否」答案的同极性写法（只认精确写法，绝不包含式：「不接受」里有「接受」二字）
-  const byPolarity = options.find(
+  const byPolarity = options.filter(
     (node) =>
       polarityMatches(target, node.textContent ?? "") || polarityMatches(target, node.getAttribute("title") ?? "") ||
       polarityMatches(target, node.getAttribute("data-value") ?? ""),
   );
-  if (byPolarity) return byPolarity;
+  if (byPolarity.length) return byPolarity.length === 1 ? byPolarity[0] : undefined;
   const partial = options.filter((node) => {
     const t = normalizeChoice(node.textContent ?? "");
     return t.length > 1 && (t.includes(norm) || norm.includes(t));
@@ -324,7 +368,7 @@ function press(node: Element, type: string): void {
 
 /** 把搜索文本敲进 combobox：react-select / 可搜索下拉只在收到输入后才拉取选项 */
 function typeIntoCombobox(el: HTMLElement, text: string): void {
-  if (!isInputElement(el)) return;
+  if (!isInputElement(el) || el.readOnly || isDisabled(el)) return;
   const view = el.ownerDocument?.defaultView ?? window;
   const setter = Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, "value")?.set;
   try {
@@ -347,7 +391,7 @@ function centerTarget(el: HTMLElement): HTMLElement | null {
   const doc = el.ownerDocument ?? document;
   const rect = el.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return null;
-  const hit = doc.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) as HTMLElement | null;
+  const hit = doc.elementFromPoint?.(rect.left + rect.width / 2, rect.top + rect.height / 2) as HTMLElement | null;
   return hit && hit !== el ? hit : null;
 }
 
@@ -359,7 +403,7 @@ function staticOptionUnder(scope: HTMLElement, target: string): HTMLElement | un
   const norm = normalizeChoice(target);
   const nodes = Array.from(
     scope.querySelectorAll<HTMLElement>('[role="option"], li, [class*="option"], [class*="item"], [data-value]'),
-  );
+  ).filter(node => isVisible(node) && !isDisabled(node) && !node.matches('[disabled],.disabled,.is-disabled,[class*="option-disabled"]'));
   return (
     nodes.find((node) => normalizeChoice(node.textContent ?? "") === norm) ??
     nodes.find((node) => normalizeChoice(node.getAttribute("data-value") ?? "") === norm) ??
@@ -380,25 +424,40 @@ function staticOptionUnder(scope: HTMLElement, target: string): HTMLElement | un
  * 全程只点击「文本匹配上的那个节点」，命不中判失败——绝不退化成点第一项。
  */
 export async function setCustomSelectValue(el: HTMLElement, value: string): Promise<SetTextResult> {
+  if (isDisabled(el)) return { ok: false, detail: "控件 disabled" };
   const doc = el.ownerDocument ?? document;
   const target = value.trim();
   if (!target) return { ok: false, detail: "下拉目标值为空" };
   const trigger = selectTriggerOf(el);
-  const scope = trigger.parentElement ?? trigger;
+  const datePart = datePartFromHint(htmlForLabel(el), el.getAttribute('placeholder') ?? '', el.getAttribute('name') ?? '', el.id);
+  const scope = el.closest<HTMLElement>('.ant-select,.el-select,.ivu-select,[role="combobox"]') ?? trigger;
   const pressAll = (node: Element) => {
     for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) press(node, type);
   };
 
-  const waitForOptions = (timeout: number) =>
-    waitFor(() => {
-      const found = popupOptions(doc);
-      return found.length > 0 ? found : null;
-    }, timeout, 40);
-
   // 点触发器**之前**已经可见的选项：属于别的弹层或静态列表，优先级排到后面
   const beforeOpen = new Set(popupOptions(doc));
-  const pick = (options: HTMLElement[] | null | undefined) =>
-    options ? chooseOption(rankPopupOptions(options, trigger, beforeOpen), target) : undefined;
+  const pick = () => {
+    const owners = new Set([el, trigger, scope, ...Array.from(scope.querySelectorAll('[aria-controls],[aria-owns]'))]);
+    const ids = [...new Set(Array.from(owners).flatMap(node => `${node.getAttribute('aria-controls') ?? ''} ${node.getAttribute('aria-owns') ?? ''}`.split(/\s+/).filter(Boolean)))];
+    if (ids.length) {
+      const root = el.getRootNode() as Document | ShadowRoot;
+      return chooseOption(ids.flatMap(id => {
+        const panel = root.getElementById(id) ?? doc.getElementById(id);
+        // Ant 的 aria-controls 指向隐藏的无障碍列表，真实选项在同一弹层的虚拟列表里。
+        return panel ? popupOptions(panel.closest('.ant-select-dropdown,.el-select-dropdown,.el-popper,.ivu-select-dropdown,.react-select__menu') ?? panel) : [];
+      }), target, datePart);
+    }
+    const all = popupOptions(doc);
+    const fresh = all.filter(node => !beforeOpen.has(node));
+    const row = scope.parentElement;
+    const isolatedRow = row && !/^(BODY|HTML|FORM)$/.test(row.tagName) &&
+      !row.querySelector('h1,h2,h3,h4,legend') &&
+      !Array.from(row.querySelectorAll('input,textarea,select,[role="combobox"],.ant-select,.el-select,.ivu-select')).some(node => node !== scope && !scope.contains(node));
+    const local = all.filter(node => scope.contains(node) || (isolatedRow && row.contains(node)));
+    return chooseOption(rankPopupOptions([...new Set([...fresh, ...local])], trigger, beforeOpen), target, datePart);
+  };
+  const waitForOption = (timeout: number) => waitFor(pick, timeout, 40);
 
   const tryOnce = async (): Promise<boolean> => {
     try {
@@ -408,25 +467,22 @@ export async function setCustomSelectValue(el: HTMLElement, value: string): Prom
       /* 站点 focus 里报错也不影响后续点击 */
     }
     pressAll(trigger);
-    let options = await waitForOptions(400);
-    let picked = pick(options);
+    let picked = await waitForOption(400);
     if (!picked) {
       // 可搜索 combobox（react-select / antd showSearch）：选项要在输入之后才出现
-      typeIntoCombobox(el, target);
-      pressAll(trigger);
-      options = await waitForOptions(450);
-      picked = pick(options);
+      const search = isInputElement(el) ? el : scope.querySelector<HTMLElement>('input:not([readonly]):not([disabled]):not([type=hidden])');
+      if (search) typeIntoCombobox(search, target);
+      picked = await waitForOption(600);
     }
     if (!picked) {
       // 点用户视觉上真正会按到的那个节点（遮罩层 / 图标层），再找一次弹层
       const hit = centerTarget(el);
       if (hit) {
         pressAll(hit);
-        options = await waitForOptions(350);
-        picked = pick(options);
+        picked = await waitForOption(350);
       }
     }
-    if (!picked) picked = staticOptionUnder(scope, target);
+    if (!picked && !scope.querySelector('[aria-controls],[aria-owns]') && ![el, trigger, scope].some(node => node.hasAttribute('aria-controls') || node.hasAttribute('aria-owns'))) picked = staticOptionUnder(scope, target) ?? null;
     if (!picked) return false; // 命不中就什么都不点，绝不退化成点第一项
     try {
       picked.click();
@@ -438,16 +494,12 @@ export async function setCustomSelectValue(el: HTMLElement, value: string): Prom
     return !!(await waitFor(() => valueMatchesRequested(el, target), 500, 40));
   };
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (await tryOnce()) return { ok: true, actual: readDisplayValue(el) };
-    // 只按 Escape 收起可能残留的弹层。绝不做「点 body 空白处」这种全局点击：
-    // 姚记真机实测发现，那一下会把承载整张表单的抽屉/弹层关掉，
-    // 后面每个字段都变成「字段已从页面消失」，一屏 13 个字段全部填不上。
-    try {
-      el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
-    } catch {
-      /* ignore */
-    }
+  if (await tryOnce()) return { ok: true, actual: readDisplayValue(el) };
+  // 失败重试由 writeVerifier 统一负责；只用 Escape 收起弹层，避免点空白处关掉整张申请表。
+  try {
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, composed: true }));
+  } catch {
+    /* ignore */
   }
   return {
     ok: false,
@@ -456,8 +508,59 @@ export async function setCustomSelectValue(el: HTMLElement, value: string): Prom
   };
 }
 
+/** 飞书年月范围：操作可见两端，弹层必须与当前端点绑定，不能写隐藏输入框。 */
+async function setPeriodDateValue(el: HTMLElement, value: string): Promise<SetTextResult> {
+  if (valueMatchesRequested(el, value)) return { ok: true, actual: readDisplayValue(el) };
+  const target = normalizeDate(value);
+  const parts = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(target);
+  // shortcut: 页面没有清空或至今入口时保留现值并报失败，不伪造日期。
+  if (!parts || Number(parts[2]) < 1 || Number(parts[2]) > 12)
+    return { ok: false, detail: "该年月控件需要 YYYY-MM 日期", actual: readDisplayValue(el) };
+  const cy = el.getAttribute("data-cy");
+  if (!cy) return { ok: false, detail: "日期弹层没有唯一关联" };
+  const panel = () => Array.from(el.ownerDocument.querySelectorAll<HTMLElement>(".atsx-date-picker-period-month-panel"))
+    .find(node => node.getAttribute("data-cy") === `${cy}Dropdown` && isVisible(node));
+  const open = async () => {
+    if (!panel()) el.click();
+    return waitFor(panel, 600, 40);
+  };
+  const first = await open();
+  if (!first) return { ok: false, detail: "无法打开年月选择器" };
+  const option = (scope: HTMLElement, part: string) => Array.from(scope.querySelectorAll<HTMLElement>(".atsx-date-picker-period-month-panel-list-item"))
+    .find(node => node.getAttribute("data-cy") === part && isVisible(node) &&
+      node.getAttribute("aria-disabled") !== "true" && !/disabled/.test(node.className));
+  // 先确认两项都存在，避免只改了年份后才发现月份不能选。
+  if (!option(first, parts[1]!) || !option(first, parts[2]!))
+    return { ok: false, detail: "目标年月不在网页可选范围", actual: readDisplayValue(el) };
+  for (const part of [parts[1]!, parts[2]!]) {
+    const current = await open();
+    const item = current && option(current, part);
+    if (!item) return { ok: false, detail: "年月选项不可用", actual: readDisplayValue(el) };
+    item.scrollIntoView?.({ block: "nearest" });
+    item.click();
+    await waitFor(() => part.length === 4
+      ? el.querySelector("[data-cy=year]")?.textContent?.trim() === part
+      : valueMatchesRequested(el, value), 400, 40);
+  }
+  const ok = !!await waitFor(() => valueMatchesRequested(el, value), 400, 40);
+  // 关闭保留在 DOM 中的弹层，避免遮挡下一个字段。
+  if (panel()) el.ownerDocument.body.click();
+  return { ok, actual: readDisplayValue(el), ...(ok ? {} : { detail: "年月覆盖后回显不匹配" }) };
+}
+
 /** 只读日期选择器：先走站点自己的日历面板，面板里没有等价日期再直接写值 */
-export async function setDatePickerValue(el: HTMLInputElement, value: string): Promise<SetTextResult> {
+export async function setDatePickerValue(el: HTMLElement, value: string): Promise<SetTextResult> {
+  if (isDisabled(el)) return { ok: false, detail: "控件 disabled" };
+  if (isPeriodDateElement(el)) return setPeriodDateValue(el, value);
+  if (!isInputElement(el)) return { ok: false, detail: "未支持的日期控件" };
+  if (["date", "month"].includes(el.type)) {
+    const normalized = normalizeDate(value);
+    const target = el.type === "month" && /^\d{4}-\d{2}(?:-\d{2})?$/.test(normalized) ? normalized.slice(0, 7) : normalized;
+    if (target && !(el.type === "month" ? /^\d{4}-\d{2}$/ : /^\d{4}-\d{2}-\d{2}$/).test(target)) return { ok: false, detail: "资料日期精度与控件不一致", actual: el.value };
+    const probe = el.ownerDocument.createElement("input"); probe.type = el.type; probe.value = target;
+    if (probe.value !== target) return { ok: false, detail: "资料日期无效", actual: el.value };
+    return writeNativeValue(el, target);
+  }
   const doc = el.ownerDocument ?? document;
   const target = normalizeDate(value);
   const variants = [...new Set([value, value.replace(/\./g, "-"), value.replace(/\./g, "/"), value.replace(/\./g, "")])];
@@ -559,13 +662,17 @@ export async function restoreValue(el: HTMLElement, previousValue: string, kind:
       return { ok: true };
     }
     if (isCheckboxElement(el)) {
-      for (const item of getCheckboxGroup(el)) {
+      const group = getCheckboxGroup(el);
+      if (group.some(item => item.checked && !isUsableChoice(item))) return { ok: false, detail: '选项不可操作，无法撤销勾选' };
+      for (const item of group) {
         if (item.checked) {
-          item.checked = false;
+          item.click();
+          fire(item, Event, 'input');
           fire(item, Event, "change");
         }
       }
-      return { ok: true };
+      const cleared = await waitFor(() => group.every(item => !item.checked), 300, 40);
+      return cleared ? { ok: true } : { ok: false, detail: '撤销勾选未生效' };
     }
   }
   if (isCheckboxElement(el)) return setCheckboxValues(el, previousValue);
@@ -573,7 +680,7 @@ export async function restoreValue(el: HTMLElement, previousValue: string, kind:
   if (isRadioElement(el)) return setRadioValue(el, previousValue);
   if (el.isContentEditable) return setContentEditableText(el, previousValue);
   if (kind === "custom-select") return setCustomSelectValue(el, previousValue);
-  if (kind === "date" && isInputElement(el) && el.readOnly) return setDatePickerValue(el, previousValue);
+  if (kind === "date" && isDatePickerElement(el)) return setDatePickerValue(el, previousValue);
   if (isInputElement(el) || isTextAreaElement(el)) {
     const res = writeNativeValue(el, previousValue);
     if (!res.ok) return res;

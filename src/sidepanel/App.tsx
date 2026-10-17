@@ -30,10 +30,14 @@ import {
 import { checkRuntimeBroadcasterSender } from "../utils/messageGuard";
 import { assembleProfile, loadStore } from "../profile/libraryStore";
 import { profileHasContent } from "../profile/profileStore";
+import { extractCompanyWithMetadata } from "../job/companyExtraction";
+import { extractPositionWithMetadata } from "../job/positionExtraction";
 import { makeManualJobContext } from "../job/jobParser";
 import type { JobContext } from "../job/schema";
 import { type ProfileType } from "../job/profileTypes";
 import type {
+  CaptureJobResult,
+  EnsureInternshipsResult,
   ScanPageResult,
   EnsureContentScriptResult,
   FillFieldsResult,
@@ -72,7 +76,7 @@ import {
   removeSiteRule,
   subscribeSiteMemoryChanges,
 } from "../site/siteMemory";
-import { findDuplicate, listJobs } from "../workspace/jobRepository";
+import { findDuplicate, getJob, listJobs, updateJob } from "../workspace/jobRepository";
 import { formatBytes, readStorageUsage, type StorageUsage } from "../utils/storageUsage";
 
 /** 识别只读；用户点选资料库后才按库内原文覆盖填写。 */
@@ -149,7 +153,7 @@ export default function App() {
 
   const [activeJob, setActiveJobState] = useState<JobContext | null>(null);
   const effectiveType: ProfileType = "general";
-  const scanRef = useRef<{ fields: RawField[]; url: string; tabId: number; title: string } | null>(null);
+  const scanRef = useRef<{ fields: RawField[]; url: string; tabId: number; title: string; jobId?: string } | null>(null);
   const busyRef = useRef(false);
   const fillJobRef = useRef<string | null>(null);
   const [usedLibraryName, setUsedLibraryName] = useState("");
@@ -559,10 +563,30 @@ export default function App() {
       if (!res?.ok || !res.fields) throw new Error(res?.error || "无法读取表单");
       const target = await chrome.tabs.get(ensure.tabId);
       scanRef.current = { fields: res.fields, url: ensure.url, tabId: ensure.tabId, title: target.title || hostOf(ensure.url) || "申请记录" };
+      try {
+        const captured = await chrome.runtime.sendMessage({ type: "CAPTURE_TARGET", expectedUrl: ensure.url, expectedTabId: ensure.tabId }) as CaptureJobResult;
+        if (captured?.ok && captured.raw) {
+          const companyResult = extractCompanyWithMetadata(captured.raw);
+          const company = companyResult.confidence === "low" ? "" : companyResult.company;
+          const positionResult = extractPositionWithMetadata(captured.raw, { company });
+          const position = positionResult.extraction?.confidence === "low" ? "" : positionResult.position;
+          if (company || position) {
+            const existing = findDuplicate(await listJobs(), { sourceUrl: ensure.url, company, position });
+            const record = existing
+              ? await updateJob(existing.id, { ...(company ? { company } : {}), ...(position ? { position } : {}) })
+              : (await upsertJobFromContext({ ...makeManualJobContext("general", ensure.url), company,
+                  position, pageTitle: target.title || "", source: "captured" })).record;
+            scanRef.current.jobId = record?.id;
+            setInboxRefresh((n) => n + 1);
+          }
+        }
+      } catch {
+        // 公司和岗位只是记录信息，采集或保存失败不阻断表单识别。
+      }
       // 换到另一页面后，不能拿上一页面的撤销记录去恢复相似字段。
       setOriginals((prev) => ensure.url === url ? prev : []);
       markStep("scan", "done", `${res.fields.length} 项`);
-      if (res.fields.length === 0) {
+      if (res.fields.length === 0 && !res.internshipAddFrameIds?.length && !Object.values(res.experienceAddFrames ?? {}).some((frames) => frames?.length)) {
         setNotice("未找到表单，请进入网申填写页后重试。");
         setPhase("idle");
       } else {
@@ -585,7 +609,7 @@ export default function App() {
     setNotice("");
     try {
       // 选库期间网页可能继续加载；填写前重新扫描，并校验仍是同一个标签页和地址。
-      const res = await chrome.runtime.sendMessage({ type: "SCAN_TARGET", expectedUrl: scan.url, expectedTabId: scan.tabId }) as ScanPageResult;
+      let res = await chrome.runtime.sendMessage({ type: "SCAN_TARGET", expectedUrl: scan.url, expectedTabId: scan.tabId }) as ScanPageResult;
       if (!res?.ok || !res.fields) throw new Error(res?.error || "页面已变化，请重新识别");
       const store = await loadStore();
       const library = store.libraries.find((item) => item.id === libraryId);
@@ -593,15 +617,40 @@ export default function App() {
       const chosenProfile = assembleProfile(store.shared, library.content);
       await switchLibrary(libraryId);
       setUsedLibraryName(library.name);
+      const notices: string[] = [];
+      const groups = [
+        { group: "basic", label: "个人信息", count: 1 },
+        { group: "education", label: "教育", count: chosenProfile.education.length },
+        { group: "internship", label: "实习/工作", count: chosenProfile.internships.length },
+        { group: "campus", label: "校园", count: chosenProfile.campus.length },
+        { group: "project", label: "项目", count: chosenProfile.projects.length },
+      ] as const;
+      for (const { group, label, count } of groups) {
+        if (!count) continue;
+        const frames = res.experienceAddFrames?.[group] ?? (group === "internship" ? res.internshipAddFrameIds : undefined);
+        if ((frames?.length ?? 0) > 1) { notices.push(`发现多个${label}添加入口，请手动补齐后重新识别。`); continue; }
+        if (frames?.length !== 1) continue;
+        const expanded = await chrome.runtime.sendMessage({ type: "ENSURE_INTERNSHIPS_TARGET", group,
+          expectedUrl: scan.url, expectedTabId: scan.tabId, frameId: frames[0], count }) as EnsureInternshipsResult;
+        if (expanded?.detail || expanded?.error) notices.push(expanded.detail || expanded.error!);
+        res = await chrome.runtime.sendMessage({ type: "SCAN_TARGET", expectedUrl: scan.url, expectedTabId: scan.tabId }) as ScanPageResult;
+        if (!res?.ok || !res.fields) throw new Error("添加后无法读取表单，请重新识别");
+      }
+
       const scanned = runScanPipeline(res.fields, chosenProfile, {
         profileType: "general",
         siteRules: rulesForHost(siteMemory, hostFromUrl(scan.url)),
       });
+      for (const { group, label, count } of groups) {
+        const rows = new Set(scanned.filter((c) => c.match.fieldId.startsWith(`${group}.`) && c.entryIndex != null).map((c) => `${c.raw.frameId ?? 0}|${c.entryIndex}`)).size;
+        if (rows > 0 && rows < count && !notices.some((notice) => notice.includes(label))) notices.push(`网页有 ${rows} 段${label}，资料库有 ${count} 段；请手动补齐后重新识别。`);
+      }
+      const entryNotice = notices.join("\n");
       setCandidates(scanned);
       setPreviewRevealed(true);
       const targets = scanned.filter(isSafeFillable);
-      // 只记录本页和填写结果，不再从网页识别岗位或决定资料方向。
-      const existing = findDuplicate(await listJobs(), { sourceUrl: scan.url, company: "", position: scan.title });
+      // 复用顺手识别的记录；公司/岗位不决定资料库或填写内容。
+      const existing = (scan.jobId ? await getJob(scan.jobId) : null) ?? findDuplicate(await listJobs(), { sourceUrl: scan.url, company: "", position: scan.title });
       const record = existing ?? (await upsertJobFromContext({
         ...makeManualJobContext("general", scan.url), position: scan.title, pageTitle: scan.title,
       })).record;
@@ -618,6 +667,8 @@ export default function App() {
       } else {
         await applyFill(targets, scanned);
       }
+      if (entryNotice) setNotice(entryNotice);
+      setMutated(false);
       setInboxRefresh((n) => n + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -895,7 +946,7 @@ export default function App() {
       {phase === "idle" && (
         <section className="hero">
           <h2 className="hero-title">填写当前网申</h2>
-          <p className="hero-desc">识别表单，选资料库，一次填入。</p>
+          <p className="hero-desc">识别表单 → 选择资料 → 自动填写</p>
           <button type="button" className="hero-btn" onClick={() => void handleRecognize()}>开始识别</button>
           {needsProfile && <button type="button" className="link-btn" onClick={() => setTab("profile")}>导入简历</button>}
         </section>

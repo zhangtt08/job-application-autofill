@@ -7,6 +7,7 @@ import type {
   CaptureJobResult,
   PingResult,
 } from "../types/message";
+import { canAddInternships, expandableExperienceGroups, ensureInternshipEntries } from "./internshipEntries";
 import { scanPageSettled } from "./scanner";
 import { fillFields, locateField, undoFill } from "./filler";
 import { extractRawJobPage } from "./jobCapture";
@@ -85,6 +86,7 @@ function setupMutationObserver(): void {
 const EXECUTABLE_TYPES = new Set<string>([
   "PING",
   "SCAN_PAGE",
+  "ENSURE_INTERNSHIPS",
   "FILL_FIELDS",
   "UNDO_FILL",
   "LOCATE_FIELD",
@@ -99,6 +101,8 @@ function rejectionFor(msg: RuntimeMessage): unknown {
   switch (msg.type) {
     case "PING":
       return { ok: false } satisfies PingResult;
+    case "ENSURE_INTERNSHIPS":
+      return { ok: false, added: 0, error: UNTRUSTED_SENDER };
     case "SCAN_PAGE":
       return { ok: false, fields: [], error: UNTRUSTED_SENDER } satisfies ScanPageResult;
     case "FILL_FIELDS":
@@ -141,8 +145,17 @@ function init(): void {
 
       case "SCAN_PAGE": {
         scanPageSettled()
-          .then((fields) => sendResponse({ ok: true, fields, environment: detectEnvironmentSnapshot() }))
+          .then((fields) => sendResponse({ ok: true, fields, canAddInternships: canAddInternships(), expandableGroups: expandableExperienceGroups(), environment: detectEnvironmentSnapshot() }))
           .catch((err) => sendResponse({ ok: false, error: String(err) }));
+        return true;
+      }
+
+      case "ENSURE_INTERNSHIPS": {
+        markWriterActive(120_000);
+        ensureInternshipEntries(msg.count, msg.group)
+          .then(sendResponse)
+          .catch((err) => sendResponse({ ok: false, added: 0, error: String(err) }))
+          .finally(() => markWriterActive(2000));
         return true;
       }
 

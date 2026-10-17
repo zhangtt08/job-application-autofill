@@ -1,6 +1,6 @@
 import type { FillPlanPayload } from "../types/message";
 import type { FillOutcome } from "../types/field";
-import { findElementByFingerprint, isCheckboxElement, isRadioElement, readDisplayValue } from "./domUtils";
+import { findElementByFingerprint, isCheckboxElement, isRadioElement, queryAllOpenRoots, readDisplayValue, valueMatchesRequested } from "./domUtils";
 import { restoreValue } from "./eventDispatcher";
 import { fillWithVerification } from "../compatibility/writeVerifier";
 import { LogEvent, logger, maskValue } from "../utils/logger";
@@ -36,10 +36,13 @@ export async function fillFields(plan: FillPlanPayload): Promise<{
     throw new Error("写入被拒绝：填写计划未经用户确认");
   }
   const items = plan.fields ?? [];
-  if (items.length === 0) {
+  if (!Array.isArray(items) || items.length === 0) {
     logger.event(LogEvent.FILL_FAILED, "FILL_FIELDS rejected: empty plan");
     throw new Error("写入被拒绝：填写计划为空");
   }
+  if (items.some(item => !item || typeof item.reference !== 'string' || typeof item.kind !== 'string' ||
+    (item.value !== undefined && typeof item.value !== 'string') ||
+    (item.writeGroup !== undefined && (typeof item.writeGroup !== 'string' || !item.writeGroup || item.writeGroup.length > 2000)))) throw new Error('写入被拒绝：填写计划格式无效');
   // —— Application Context Gate（第三道防线，issue-004）——
   // 计划里出现「语境判定非申请控件」的项，说明上游已经出错：整份拒绝，也不把手机号写进登录框。
   const ineligible = items.filter((f) => f.contextEligible === false);
@@ -54,8 +57,11 @@ export async function fillFields(plan: FillPlanPayload): Promise<{
   // 继续硬试只会把剩下每个字段都报成失败；这里停下来说清原因，让用户重新识别一次。
   let missingStreak = 0;
 
-  const targets = items.map((item) => ({ item, element: findElementByFingerprint(item.reference) }));
-  for (const { item, element } of targets) {
+  const targets = items.map((item) => {
+    const element = findElementByFingerprint(item.reference);
+    return { item, element, initialValue: element ? readDisplayValue(element) : undefined };
+  });
+  for (const { item, element, initialValue } of targets) {
     logger.event(LogEvent.FILL_START, `开始写入 ${item.reference.slice(0, 50)}`);
 
     if (missingStreak >= 3) {
@@ -63,7 +69,7 @@ export async function fillFields(plan: FillPlanPayload): Promise<{
       continue;
     }
 
-    const el = element?.isConnected ? element : findElementByFingerprint(item.reference);
+    let el = element?.isConnected ? element : findElementByFingerprint(item.reference);
     if (!el) {
       missingStreak++;
       outcomes.push({ reference: item.reference, status: "failed", detail: "字段已从页面消失，请重新扫描" });
@@ -76,9 +82,10 @@ export async function fillFields(plan: FillPlanPayload): Promise<{
       outcomes.push({ reference: item.reference, status: "failed", detail: "资料为空，保留网页原值" });
       continue;
     }
-    const previousValue = readDisplayValue(el);
+    const previousValue = initialValue ?? readDisplayValue(el);
 
     const verify = await fillWithVerification(el, item.value, previousValue);
+    if (!el.isConnected) el = findElementByFingerprint(item.reference) ?? el;
     if (verify.status === "success" || readDisplayValue(el) !== previousValue) {
       const undoTag = `a${++undoSeq}`;
       el.setAttribute(UNDO_ATTR, undoTag);
@@ -105,6 +112,43 @@ export async function fillFields(plan: FillPlanPayload): Promise<{
     }
   }
 
+  // 后续字段的联动校验可能回滚前面已填的值，整批结束后再核对一次。
+  const recheck = () => {
+    for (let index = 0; index < targets.length; index++) {
+      const outcome = outcomes[index];
+      if (outcome?.status !== 'filled') continue;
+      const { item, element } = targets[index]!;
+      const live = element?.isConnected ? element : findElementByFingerprint(item.reference);
+      if (!live || !valueMatchesRequested(live, item.value ?? '')) {
+        outcome.status = 'failed';
+        outcome.detail = '填写后被网页联动校验改回或重建，请重新识别并核对';
+      }
+    }
+  };
+  recheck();
+  const failedGroups = new Set(targets.filter((target, index) => target.item.writeGroup && outcomes[index]?.status !== 'filled').map(target => target.item.writeGroup));
+  for (const group of failedGroups) {
+    const members = targets.map((target, index) => ({ ...target, index })).filter(target => target.item.writeGroup === group);
+    let restored = true;
+    for (const { item, element, initialValue } of members) {
+      let live = element?.isConnected ? element : findElementByFingerprint(item.reference);
+      if (!live || initialValue === undefined) { restored = false; continue; }
+      if (readDisplayValue(live) !== initialValue) {
+        const result = await restoreValue(live, initialValue, item.kind);
+        if (!live.isConnected) live = findElementByFingerprint(item.reference) ?? live;
+        if (!result.ok || !live.isConnected || !valueMatchesRequested(live, initialValue)) restored = false;
+      }
+    }
+    for (const { item, element, initialValue } of members) {
+      const live = element?.isConnected ? element : findElementByFingerprint(item.reference);
+      if (!live || initialValue === undefined || !valueMatchesRequested(live, initialValue)) restored = false;
+    }
+    for (const { index } of members) {
+      outcomes[index]!.status = 'failed';
+      outcomes[index]!.detail = restored ? '日期的一部分未能填写，已恢复整组原值' : '日期的一部分未能填写，整组恢复未完成，请手动核对';
+    }
+  }
+  if (failedGroups.size) recheck();
   return { outcomes, originals };
 }
 
@@ -114,10 +158,11 @@ export async function undoFill(
 ): Promise<{ restored: number; failed: number }> {
   let restored = 0;
   let failed = 0;
+  const completed: { rec: (typeof originals)[number]; element: HTMLElement }[] = [];
   for (const rec of originals) {
     const el =
       (rec.undoTag
-        ? document.querySelector<HTMLElement>(`[${UNDO_ATTR}="${rec.undoTag.replace(/["\\]/g, "")}"]`)
+        ? queryAllOpenRoots<HTMLElement>(document, `[${UNDO_ATTR}="${rec.undoTag.replace(/["\\]/g, "")}"]`)[0]
         : null) ?? findElementByFingerprint(rec.reference);
     if (!el) {
       failed++;
@@ -132,10 +177,16 @@ export async function undoFill(
         : { ok: false };
     if (result.ok) {
       restored++;
-      el.removeAttribute(UNDO_ATTR);
+      const live = el.isConnected ? el : findElementByFingerprint(rec.reference);
+      live?.removeAttribute(UNDO_ATTR);
+      completed.push({ rec, element: live ?? el });
     } else {
       failed++;
     }
+  }
+  for (const { rec, element } of completed) {
+    const live = element.isConnected ? element : findElementByFingerprint(rec.reference);
+    if (!live || !valueMatchesRequested(live, rec.previousValue)) { restored--; failed++; }
   }
   return { restored, failed };
 }

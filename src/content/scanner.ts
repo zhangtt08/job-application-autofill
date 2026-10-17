@@ -1,6 +1,6 @@
 import type { RawField } from "../types/field";
 import { IGNORED_INPUT_TYPES, isIgnoredByKeyword } from "../rules/ignoreRules";
-import { isCustomSelectElement, isDatePickerElement, isInputElement, isSelectElement, isTextAreaElement, isVisible } from "./domUtils";
+import { isCustomSelectElement, isDatePickerElement, isDisabled, isInputElement, isSelectElement, isTextAreaElement, isVisible, queryAllOpenRoots, visibleChoiceProxy } from "./domUtils";
 import { buildRawField, detectKind } from "./contextExtractor";
 import { LogEvent, logger } from "../utils/logger";
 
@@ -11,6 +11,7 @@ import { LogEvent, logger } from "../utils/logger";
  */
 const CONTROL_SELECTOR = [
   "input",
+  ".atsx-date-picker-period-month > .atsx-date-picker-period-month-label",
   "textarea",
   "select",
   '[role="combobox"]',
@@ -38,10 +39,6 @@ function dedupe(fields: RawField[]): RawField[] {
   });
 }
 
-function isDisabled(el: HTMLElement): boolean {
-  return (isInputElement(el) || isTextAreaElement(el) || isSelectElement(el)) && el.disabled;
-}
-
 function isReadOnly(el: HTMLElement): boolean {
   return (
     (isInputElement(el) || isTextAreaElement(el)) &&
@@ -53,6 +50,7 @@ function isReadOnly(el: HTMLElement): boolean {
 
 /** 与主文档同一套过滤：不可见 / 零尺寸 / aria-hidden / 黑名单关键词 / 已禁用 */
 function accepts(el: HTMLElement): boolean {
+  if (el.classList.contains("atsx-date-picker-period-hidden-input")) return false;
   if (isInputElement(el) && IGNORED_INPUT_TYPES.has(el.type)) return false;
 
   const kind = detectKind(el);
@@ -60,15 +58,28 @@ function accepts(el: HTMLElement): boolean {
 
   // 组件容器（.el-select/.ant-select）若内部已有真实 input/combobox，
   // 只保留内部控件，避免同一个字段生成两张卡片、两次写入。
-  if (!isInputElement(el) && !isTextAreaElement(el) && !isSelectElement(el) && isCustomSelectElement(el) &&
-    el.querySelector("input, textarea, select, [role=combobox]") !== null) return false;
+  if (!isInputElement(el) && !isTextAreaElement(el) && !isSelectElement(el) && isCustomSelectElement(el)) {
+    const combo = el.closest('[role="combobox"]');
+    if (combo && combo !== el) return false;
+    const wrapper = el.parentElement?.closest('.ant-select,.el-select,.ivu-select,[role="combobox"]');
+    if (wrapper && Array.from(wrapper.querySelectorAll<HTMLElement>('input,[role="combobox"]')).some(control => control !== el && isVisible(control) && control.getBoundingClientRect().width > 0 && control.getBoundingClientRect().height > 0)) return false;
+    // 飞书非搜索下拉里的 input 尺寸为零：保留可见触发器，不能整栏一起过滤。
+    if (Array.from(el.querySelectorAll<HTMLElement>("input,textarea,select,[role=combobox]")).some((control) =>
+      isVisible(control) && control.getBoundingClientRect().width > 0 && control.getBoundingClientRect().height > 0,
+    )) return false;
+  }
   if (el.isContentEditable === false && kind === "contenteditable") return false;
+  if (kind === 'contenteditable') {
+    const parentEditor = el.parentElement?.closest('[contenteditable]');
+    if (el.closest('[aria-readonly="true"]') || (parentEditor && parentEditor.getAttribute('contenteditable') !== 'false')) return false;
+  }
 
   if (isDisabled(el) || isReadOnly(el)) return false;
-  if (!isVisible(el)) return false;
+  const proxy = visibleChoiceProxy(el);
+  if (!isVisible(el) && !proxy) return false;
   if (el.getAttribute("aria-hidden") === "true") return false;
-  const box = el.getBoundingClientRect();
-  if (box.width === 0 && box.height === 0) return false;
+  const box = (proxy ?? el).getBoundingClientRect();
+  if (box.width === 0 || box.height === 0) return false;
 
   const textProbe = [
     el.getAttribute("name") ?? "",
@@ -83,32 +94,6 @@ function accepts(el: HTMLElement): boolean {
   return true;
 }
 
-function collectFrom(root: Document | ShadowRoot | Element, out: HTMLElement[]): void {
-  let found: NodeListOf<HTMLElement>;
-  try {
-    found = (root as ParentNode).querySelectorAll<HTMLElement>(CONTROL_SELECTOR);
-  } catch {
-    return;
-  }
-  for (const el of Array.from(found)) {
-    if (el.shadowRoot) collectFrom(el.shadowRoot, out);
-    out.push(el);
-  }
-}
-
-/** open shadowRoot（含多层嵌套）内字段采集；iframe 由各 frame 自己的 content script 扫描 */
-function collectFromShadowRoots(doc: Document, fields: RawField[]): void {
-  const out: HTMLElement[] = [];
-  for (const el of doc.querySelectorAll<HTMLElement>("*")) {
-    if (el.shadowRoot) collectFrom(el.shadowRoot, out);
-  }
-  for (const el of out) {
-    if (!accepts(el)) continue;
-    const raw = buildRawField(el);
-    if (raw) fields.push(raw);
-  }
-}
-
 /**
  * DOM Scanner —— 只读操作，对目标页面零写入（产品红线，e2e/scan-does-not-write.spec.ts 守护）。
  * 收集 input / textarea / select / radio 组 / checkbox 组 / 自定义下拉 / contenteditable，
@@ -118,8 +103,7 @@ export function scanPage(): RawField[] {
   logger.event(LogEvent.SCAN_START, "开始扫描页面表单");
 
   const fields: RawField[] = [];
-  const out: HTMLElement[] = [];
-  collectFrom(document, out);
+  const out = queryAllOpenRoots<HTMLElement>(document, CONTROL_SELECTOR);
   for (const el of out) {
     if (!accepts(el)) continue;
     const raw = buildRawField(el);
@@ -129,11 +113,6 @@ export function scanPage(): RawField[] {
     }
   }
 
-  try {
-    collectFromShadowRoots(document, fields);
-  } catch (err) {
-    logger.event(LogEvent.FIELD_SKIPPED, `shadow collect failed: ${String(err).slice(0, 60)}`);
-  }
   // 不再从父页面递归 same-origin iframe：扩展现在把 content script 注入到每个 frame，
   // 由 Background 逐 frame 扫描后合并（见 background/index.ts 的 SCAN_TARGET）。
   // 两边都收会把同一个 iframe 字段报两遍（两张卡片、两次写入）。
@@ -153,34 +132,19 @@ export async function scanPageSettled(options: { settleMs?: number; maxWait?: nu
   const settleMs = options.settleMs ?? 350;
   const maxWait = options.maxWait ?? 2500;
   const deadline = Date.now() + maxWait;
-  const countControls = () => {
-    let n = document.querySelectorAll(CONTROL_SELECTOR).length;
-    for (const el of Array.from(document.querySelectorAll("*"))) {
-      const root = (el as HTMLElement).shadowRoot;
-      if (root) n += root.querySelectorAll(CONTROL_SELECTOR).length;
-    }
-    for (const frame of Array.from(document.querySelectorAll("iframe"))) {
-      try {
-        if (frame.contentDocument) n += frame.contentDocument.querySelectorAll(CONTROL_SELECTOR).length;
-      } catch {
-        /* cross-origin */
-      }
-    }
-    return n;
-  };
+  const controls = () => queryAllOpenRoots<HTMLElement>(document, CONTROL_SELECTOR);
 
-  let last = countControls();
+  let last = controls();
   let stableSince = Date.now();
   // eslint-disable-next-line no-constant-condition
   while (true) {
     await new Promise((r) => setTimeout(r, 120));
-    const count = countControls();
-    if (count !== last) {
-      last = count;
+    if (Date.now() >= deadline) break;
+    const current = controls();
+    if (current.length !== last.length || current.some((el, index) => el !== last[index])) {
+      last = current;
       stableSince = Date.now();
-    } else if (count > 0 && Date.now() - stableSince >= settleMs) {
-      break;
-    } else if (Date.now() >= deadline) {
+    } else if (current.length > 0 && Date.now() - stableSince >= settleMs) {
       break;
     }
   }

@@ -78,6 +78,12 @@ export interface RawFieldContext {  labelText: string;
   currentValue: string;
   /** 同一条教育/经历表单块的结构标识，用于按块分配资料。 */
   entryGroup?: string;
+  /** 卡片在同类兄弟中的位置，包括尚未打开编辑的只读卡片。 */
+  entryOrdinal?: number;
+  /** 拆分日期控件的组成部分、整组精度和稳定分组，保持同一日期的年月日对齐。 */
+  datePart?: "year" | "month" | "day";
+  datePrecision?: "year" | "month" | "day";
+  dateGroup?: string;
   /** 由近及远的祖先结构信号（≤5 层）；缺失 = 老数据或未采集，语境判定按 unknown 保守处理 */
   ancestorSignals?: ContextAncestorSignal[];
   /** 同近邻容器内其他控件的 label/placeholder（≤10 条，每条 ≤24 字）——「典型申请字段共现」信号 */
@@ -225,6 +231,8 @@ export interface ConfirmedFillPlan {
     approved: true;
     /** 语境门禁第二道防线（issue-004）：Writer 见到 false 一律拒绝，即使上游出了 bug */
     contextEligible?: boolean;
+    frameId?: number;
+    writeGroup?: string;
   }[];
 }
 

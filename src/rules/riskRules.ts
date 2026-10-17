@@ -125,6 +125,7 @@ export function riskOfFieldId(fieldId: string): RiskAssessment {
     fieldId === "campus.endDate" ||
     fieldId === "project.name" ||
     fieldId === "project.role" ||
+    fieldId === "project.link" ||
     fieldId === "project.startDate" ||
     fieldId === "project.endDate" ||
     /** 「是否有实习/项目经验」：由库里已存在的条目推出，是事实陈述，不是主观表达 */

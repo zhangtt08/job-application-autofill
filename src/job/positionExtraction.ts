@@ -55,6 +55,8 @@ export function positionConfidence(score: number): "high" | "medium" | "low" {
  */
 export const GENERIC_JOB_PAGE_LABELS = [
   "职位详情",
+  "网申表单", "申请表", "校招申请表", "校园招聘申请表",
+  "我的简历", "个人简历", "简历填写", "填写简历", "简历编辑", "个人信息", "基本信息",
   "招聘职位",
   "校园招聘",
   "社会招聘",

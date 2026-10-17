@@ -1,6 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { parseResumeText } from "../src/profile/resumeTextParser";
 
+it("明确标注的描述、概述、职责、内容和背景分开保存", () => {
+  const r = parseResumeText(`张三
+项目经历
+2024.01-2024.06  测试项目
+项目描述：完整描述原文
+项目概述：概述原文
+项目职责：职责原文
+项目内容：内容原文
+项目背景：背景原文`);
+  if (!r.ok) throw new Error("should parse");
+  expect(r.profile.projects[0]).toMatchObject({ description: "完整描述原文", summary: "概述原文", responsibilities: "职责原文", workContent: "内容原文", background: "背景原文" });
+});
+
+it("只有总结时不挪用为描述", () => {
+  const r = parseResumeText("张三\n实习经历\n2024.01-2024.06  测试科技有限公司  实习生\n总结：总结原文");
+  if (!r.ok) throw new Error("should parse");
+  expect(r.profile.internships[0]).toMatchObject({ description: "", summary: "总结原文" });
+});
+
 const SAMPLE = `张小明
 手机：15300001122　邮箱：test.resume@example.com
 所在城市：杭州
@@ -174,4 +193,11 @@ XX集团 数据分析师 2022年3月-2024年6月
     expect(profile.internships[0]!.description).not.toContain("实习经历");
     expect(profile.education[0]!.school).not.toContain("教育背景");
   });
+});
+
+it("项目链接单独保留，不混入项目描述",()=>{
+ const result=parseResumeText("张三\n项目经历\n2024.01-2024.06  示例项目\n项目链接：https://example.com/\n项目描述：项目原文");
+ if(!result.ok)throw Error("简历解析失败");
+ expect(result.profile.projects[0]?.link).toBe("https://example.com/");
+ expect(result.profile.projects[0]?.description).toBe("项目原文");
 });

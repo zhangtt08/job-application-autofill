@@ -32,6 +32,7 @@ export function buildFillPlan(
       contextEligible: c.applicationContext ? c.applicationContext.eligible : true,
       // 跨域 iframe 的表单控件要发给它自己所在的 frame 才能写进去
       frameId: c.raw.frameId ?? 0,
+      ...(c.raw.context.datePart && c.raw.context.dateGroup ? { writeGroup: `${c.match.fieldId}|${c.raw.context.dateGroup}` } : {}),
     }));
 
   return {

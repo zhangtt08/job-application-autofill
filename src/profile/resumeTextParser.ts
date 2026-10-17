@@ -179,7 +179,7 @@ function stripDecor(line: string): string {
  * 「项目背景：面向校园场景的问答」是条目里的一行，不是「项目」板块的开头——
  * 没有这道拦截，整段项目背景会被吃掉变成一个空板块。
  */
-const SECTION_SUFFIX_BLOCK = /背景|职责|内容|成果|简介|介绍|概述|角色|目标|要求|描述|业绩|收获|总结|详情|详情|时间|地点/;
+const SECTION_SUFFIX_BLOCK = /背景|职责|内容|成果|简介|介绍|概述|角色|目标|要求|描述|业绩|收获|总结|详情|链接|网址|地址|时间|地点/;
 
 /**
  * 判定一行是否为分节标题。
@@ -452,23 +452,27 @@ function splitTokens(text: string): string[] {
  * ------------------------------------------------------------------ */
 
 type Slot =
+  | "description"
   | "role"
   | "background"
   | "responsibilities"
   | "workContent"
   | "achievements"
   | "summary"
+  | "link"
   | "gpa"
   | "rank"
   | "courses";
 
 const SLOT_LABELS: { slot: Slot; re: RegExp }[] = [
+  { slot: "link", re: /^(?:项目链接|项目网址|项目地址)\s*[:：]\s*(https?:\/\/\S+)$/i },
+  { slot: "description", re: /^(?:项目描述|项目介绍|项目简介|实习描述|工作描述|校园经历描述|经历描述|描述)\s*[:：]\s*(.+)$/ },
   { slot: "role", re: /^(?:角色|担任|职务角色|我的角色|个人角色|承担角色)\s*[:：]\s*(.+)$/ },
-  { slot: "background", re: /^(?:项目背景|选题背景|背景介绍|项目简介|项目介绍|背景)\s*[:：]\s*(.+)$/ },
-  { slot: "responsibilities", re: /^(?:工作职责|岗位职责|主要职责|职责描述|职责|承担工作)\s*[:：]\s*(.+)$/ },
-  { slot: "workContent", re: /^(?:工作内容|主要工作内容|主要工作|工作描述|工作概述|项目内容|核心工作)\s*[:：]\s*(.+)$/ },
+  { slot: "background", re: /^(?:项目背景|选题背景|背景介绍|背景)\s*[:：]\s*(.+)$/ },
+  { slot: "responsibilities", re: /^(?:工作职责|岗位职责|项目职责|主要职责|职责描述|职责|承担工作)\s*[:：]\s*(.+)$/ },
+  { slot: "workContent", re: /^(?:工作内容|主要工作内容|主要工作|项目内容|核心工作)\s*[:：]\s*(.+)$/ },
   { slot: "achievements", re: /^(?:工作业绩|主要业绩|业绩|项目成果|主要成果|成果|产出|取得成果)\s*[:：]\s*(.+)$/ },
-  { slot: "summary", re: /^(?:总结与收获|工作总结|个人收获|总结|收获|反思|心得体会)\s*[:：]\s*(.+)$/ },
+  { slot: "summary", re: /^(?:项目概述|工作概述|概述|项目总结|总结与收获|工作总结|个人收获|总结|收获|反思|心得体会)\s*[:：]\s*(.+)$/ },
   { slot: "gpa", re: /^(?:GPA|绩点|平均绩点)\s*[:：]\s*(.+)$/i },
   { slot: "rank", re: /^(?:专业排名|年级排名|排名)\s*[:：]\s*(.+)$/ },
   { slot: "courses", re: /^(?:主修课程|核心课程|相关课程|课程)\s*[:：]\s*(.+)$/ },
@@ -480,6 +484,7 @@ const RESULT_HINT =
   /\d+(?:\.\d+)?\s*(?:%|％|倍|万|千|个|人次|人|次|篇|份|条|台|套|小时|天|周|个月|月|年)|提升|增长|提高|降低|减少|节省|超过|达成|获奖|荣获|上线|发布|落地|转化率|覆盖率|Top\s*\d/i;
 
 interface EntryDraft {
+  link: string;
   title: string;
   start: string;
   end: string;
@@ -507,6 +512,7 @@ function splitListItems(value: string): string[] {
 function classifyGroup(group: Line[]): EntryDraft {
   const { title, rest } = resolveTitleRow(group);
   const draft: EntryDraft = {
+    link: "",
     title: removeDates(title) || title,
     start: "",
     end: "",
@@ -535,7 +541,9 @@ function classifyGroup(group: Line[]): EntryDraft {
       const value = re.exec(text)?.[1]?.trim();
       if (!value) continue;
       matched = true;
-      if (slot === "role") draft.role = draft.role ? `${draft.role}、${value}` : value;
+      if (slot === "link") draft.link = value;
+      else if (slot === "description") draft.points.push(value);
+      else if (slot === "role") draft.role = draft.role ? `${draft.role}、${value}` : value;
       else if (slot === "background") draft.background = draft.background ? `${draft.background}\n${value}` : value;
       else if (slot === "responsibilities") draft.responsibilities.push(...splitListItems(value));
       else if (slot === "workContent") draft.workContent.push(...splitListItems(value));
@@ -573,13 +581,8 @@ interface ExperienceTail {
 }
 
 function buildTail(draft: EntryDraft): ExperienceTail {
-  const descParts = [...draft.points];
-  if (draft.background) descParts.push(`【背景】${draft.background}`);
-  if (draft.courses) descParts.push(`【主修课程】${draft.courses}`);
-  const description = descParts.length > 0 ? descParts.join("\n") : draft.summary;
-
   return {
-    description,
+    description: draft.points.join("\n"),
     responsibilities: draft.responsibilities.join("\n"),
     workContent: draft.workContent.join("\n"),
     achievements: draft.achievements.join("\n"),
@@ -710,6 +713,7 @@ function parseProjects(groups: Line[][]): ProjectEntry[] {
     return {
       name,
       role: draft.role || roleFromTitle,
+      link: draft.link,
       startDate: draft.start,
       endDate: draft.end,
       keywords: [],

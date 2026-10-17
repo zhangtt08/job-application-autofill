@@ -6,6 +6,7 @@ import { defaultProfile } from "../../profile/defaultProfile";
 import { ImportPanel } from "./ImportPanel";
 import { LibraryPicker } from "./LibraryPicker";
 import type { ProfileLibrary } from "../../profile/libraryStore";
+import {loadStore,splitProfile,writeLibraryContent} from "../../profile/libraryStore";
 
 export interface ProfileEditorProps {
   profile: Profile;
@@ -87,6 +88,8 @@ export function ProfileEditor({
   libraryName,
 }: ProfileEditorProps) {
   const [draft, setDraft] = useState<Profile>(profile);
+  const [exporting, setExporting] = useState(false);
+  const [exportProblem, setExportProblem] = useState('');
   const set = (fn: (p: Profile) => void) => {
     const next = structuredClone(draft);
     fn(next);
@@ -121,6 +124,21 @@ export function ProfileEditor({
     URL.revokeObjectURL(url);
   };
 
+  const handlePortableExport = async () => {
+    setExporting(true);setExportProblem('');
+    try {
+      const store = await loadStore();
+      if (!store.libraries.some(library => library.id === activeLibraryId)) throw new Error('当前资料库已变化，请重新打开资料页');
+      const {shared,content} = splitProfile(draft);
+      const {createPortableArchive} = await import('../../profile/portable');
+      const blob = await createPortableArchive(writeLibraryContent(store,activeLibraryId,content,shared));
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');link.href=url;link.download='网申助手迁移包.zip';link.click();
+      setTimeout(()=>URL.revokeObjectURL(url),60000);
+    } catch(error) { setExportProblem(`迁移包未保存：${error instanceof Error ? error.message : String(error)}`); }
+    finally { setExporting(false); }
+  };
+
   return (
     <div className="pe">
       <div className="pe-toolbar">
@@ -131,6 +149,9 @@ export function ProfileEditor({
         {/* 导出 / 重置是低频动作：折进「更多」，顶栏只剩「返回」和「保存」两个决定 */}
         <details className="soft-fold pe-more">
           <summary>更多</summary>
+          <button type="button" onClick={()=>void handlePortableExport()} disabled={exporting}>
+            {exporting ? '正在打包…' : '保存迁移包'}
+          </button>
           <button type="button" onClick={handleExport}>
             导出 JSON
           </button>
@@ -147,6 +168,8 @@ export function ProfileEditor({
           保存
         </button>
       </div>
+
+      {exportProblem && <p role="alert">{exportProblem}</p>}
 
       <LibraryPicker
         libraries={libraries}
@@ -175,7 +198,7 @@ export function ProfileEditor({
         />
       </details>
 
-      <div className="pe-group">公共信息 · 所有资料库共用，改一次全库生效</div>
+      <div className="pe-group">公共信息 · 各库共用</div>
 
       <details open>
         <summary>基础信息</summary>
@@ -348,6 +371,7 @@ export function ProfileEditor({
               </button>
             </div>
             <TextInput label="项目名称" value={pj.name} onChange={(v) => set((p) => (p.projects[i]!.name = v))} />
+            <TextInput label="项目链接" value={pj.link ?? ""} onChange={(v) => set((p) => (p.projects[i]!.link = v))} />
             <TextInput label="角色" value={pj.role} onChange={(v) => set((p) => (p.projects[i]!.role = v))} />
             <TextInput label="开始" value={pj.startDate} onChange={(v) => set((p) => (p.projects[i]!.startDate = v))} />
             <TextInput label="结束" value={pj.endDate} onChange={(v) => set((p) => (p.projects[i]!.endDate = v))} />
@@ -365,7 +389,7 @@ export function ProfileEditor({
           onClick={() =>
             set((p) =>
               p.projects.push({
-                name: "", role: "", startDate: "", endDate: "",
+                name: "", link: "", role: "", startDate: "", endDate: "",
                 description: "", keywords: [],
                 background: "", responsibilities: "", workContent: "", achievements: "", summary: "",
                 variants: { agent: "", aiApplication: "", aiProduct: "", aiOperation: "", aiSolution: "", aigcMarketing: "" },

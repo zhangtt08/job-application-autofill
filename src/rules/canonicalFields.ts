@@ -84,6 +84,7 @@ export const CANONICAL_FIELDS: CanonicalFieldDef[] = [
   /** 「是否有项目经验」是非题（同 internship.hasExperience：只在有条目时答「是」） */
   { id: "project.hasExperience", group: "project", multiEntry: false },
   { id: "project.role", group: "project", multiEntry: true },
+  { id: "project.link", group: "project", multiEntry: true },
   { id: "project.startDate", group: "project", multiEntry: true },
   { id: "project.endDate", group: "project", multiEntry: true },
   {

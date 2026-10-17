@@ -1,0 +1,15 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>网申表单</title>
+<style>body{font:15px system-ui;padding:20px}section{padding:12px;border:1px solid #ddd;margin:12px}.entry{padding:12px;margin:10px;border:1px solid #eee}label{display:block;margin:8px}input,textarea{display:block;width:300px;padding:5px}button{padding:8px}</style></head><body>
+<form id="form"><section><h2>教育经历</h2><button type="button" id="education-add">添加</button></section>
+<section id="internship-section"><h2>实习经历</h2><div id="entries"></div><button type="button" id="add">添加（最多3段）</button></section>
+<button id="submit">提交申请</button></form>
+<script>
+window.addClicks=0;window.educationClicks=0;window.submitClicks=0;
+const params=new URLSearchParams(location.search);const maximum=Number(params.get('max')||3);const initial=Number(params.get('existing')??1);
+const entries=document.getElementById('entries');const add=document.getElementById('add');add.textContent=`添加（最多${maximum}段）`;
+function append(old=false){const i=entries.children.length;const row=document.createElement('div');row.className='entry';row.innerHTML=`<label>公司<input class="company" value="${old?'导入公司'+i:''}"></label><label>岗位<input class="position" value="${old?'导入岗位'+i:''}"></label><label>实习描述<textarea class="description">${old?'导入描述'+i:''}</textarea></label>`;entries.append(row);if(entries.children.length>=maximum)add.disabled=true;}
+for(let i=0;i<initial;i++)append(true);
+add.addEventListener('click',()=>{window.addClicks++;if(entries.children.length<maximum)setTimeout(()=>append(),80);});
+document.getElementById('education-add').addEventListener('click',()=>window.educationClicks++);
+document.getElementById('form').addEventListener('submit',e=>{e.preventDefault();window.submitClicks++;});
+</script></body></html>

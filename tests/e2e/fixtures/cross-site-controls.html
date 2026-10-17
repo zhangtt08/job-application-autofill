@@ -1,0 +1,32 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>申请表组件兼容回归</title>
+<style>body{font:16px system-ui;max-width:850px;margin:32px auto}section{padding:16px;border:1px solid #ccc;margin:12px 0}label{display:block;margin:10px 0}input,textarea{padding:6px;min-width:220px}.ant-select{border:1px solid #888;padding:8px;width:320px}.ant-select-selection-item{display:block}[role=option]{padding:8px;border:1px solid #ddd;cursor:pointer}button{padding:8px}</style>
+<h1>填写申请信息</h1><form>
+<section><h2>个人信息</h2><div id="shadow-host"></div><label>邮箱<input id="email" value="old@example.invalid" type="email"></label></section>
+<section id="education"><h2>教育经历</h2>
+<div class="entry"><label>学校</label><div class="ant-select"><span class="ant-select-selection-item">旧大学</span><input id="school" aria-label="学校" role="combobox" aria-controls="school-list"></div><label>学历</label><div role="combobox" id="degree" aria-label="学历" aria-controls="degree-list" tabindex="0">博士</div>
+<label>开始时间<input id="education-start" type="month" value="2019-09"></label><label>结束时间<input id="education-end" type="month" value="2020-06"></label></div></section>
+<section id="internships"><h2>实习经历</h2></section>
+<fieldset disabled><legend>已锁定信息</legend><label>姓名<input id="locked" value="保留锁定值"></label></fieldset>
+<div aria-hidden="true"><label>邮箱<input id="hidden" value="保留隐藏值"></label></div>
+<button type="submit">提交申请</button></form>
+<aside id="unrelated" role="listbox"><div role="option">本科</div></aside><div id="school-list" role="listbox"></div>
+<script>
+window.addClicks=0;window.wrongClicks=0;window.submitClicks=0;window.nameState='旧姓名';
+document.querySelector('form').addEventListener('submit',event=>{event.preventDefault();window.submitClicks++});
+document.querySelector('#unrelated [role=option]').addEventListener('click',()=>window.wrongClicks++);
+let host=document.getElementById('shadow-host');
+for(let i=0;i<3;i++){const root=host.attachShadow({mode:'open'});host=root.appendChild(document.createElement('div'));}
+host.innerHTML='<label for="name">姓名</label><input id="name" value="旧姓名" style="padding:6px;width:240px">';
+const nameInput=host.querySelector('input');
+document.getElementById('shadow-host').addEventListener('input',()=>{window.nameState=nameInput.value});
+function schoolOption(text){const panel=document.getElementById('school-list');panel.innerHTML='';const option=panel.appendChild(document.createElement('div'));option.setAttribute('role','option');option.textContent=text;option.onclick=()=>{document.querySelector('.ant-select-selection-item').textContent=text;document.getElementById('school').value='';panel.innerHTML=''};}
+document.getElementById('school').addEventListener('input',event=>schoolOption(event.target.value));
+document.querySelector('.ant-select').addEventListener('click',()=>schoolOption(document.querySelector('.ant-select-selection-item').textContent));
+document.getElementById('degree').addEventListener('click',()=>setTimeout(()=>{if(document.getElementById('degree-list'))return;const panel=document.body.appendChild(document.createElement('div'));panel.id='degree-list';panel.setAttribute('role','listbox');for(const text of ['本科','硕士','博士']){const option=panel.appendChild(document.createElement('div'));option.setAttribute('role','option');option.textContent=text;option.onclick=()=>{document.getElementById('degree').textContent=text;panel.remove()}}},80));
+function mountInternships(count){
+ const section=document.createElement('section');section.id='internships';section.innerHTML='<h2>实习经历</h2>'+Array.from({length:count},(_,i)=>'<div class="entry"><label>公司名称<input id="company-'+i+'" value="旧公司'+i+'"></label><label>岗位<input id="position-'+i+'" value="旧岗位'+i+'"></label><label>描述<textarea id="description-'+i+'">旧描述'+i+'</textarea></label><label>开始时间<input id="start-'+i+'" type="month" value="2019-01"></label><label>结束时间<input id="end-'+i+'" type="month" value="2020-01"></label></div>').join('');
+ if(count<3){const button=section.appendChild(document.createElement('button'));button.type='button';button.textContent='添加（最多3段）';button.onclick=()=>{window.addClicks++;setTimeout(()=>mountInternships(count+1),30)};}
+ document.getElementById('internships').replaceWith(section);
+}
+mountInternships(1);
+</script></html>

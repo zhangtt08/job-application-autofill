@@ -14,13 +14,16 @@ let changed=false;
 async function main(){
  if(!base||!/^http:\/\/127\.0\.0\.1:\d+$/.test(base)||!token)throw Error('缺少有效的本机导入服务');
  const response=await fetch(`${base}/package?token=${encodeURIComponent(token)}`);if(!response.ok)throw Error('无法读取导入包');
- const pack=await response.json();
+ let pack=await response.json();
  if(pack.inspectOnly){
    const snapshot=await chrome.storage.local.get(keys);
-   await send('snapshot',{extensionId:chrome.runtime.id,original:snapshot});
-   status.textContent='已读取当前资料库，尚未修改内容。';
-   result.textContent='接下来按当前字段结构补齐岗位描述。';
-   return;
+   const prepared=await send('snapshot',{extensionId:chrome.runtime.id,original:snapshot});
+   if(prepared.pack)pack=prepared.pack;
+   else {
+     status.textContent='已读取当前资料库，尚未修改内容。';
+     result.textContent='当前资料已保存为本机快照。';
+     return;
+   }
  }
  for(const l of pack.libraries){const v=validateProfile(structuredClone(l.profile));if(!v.ok)throw Error(`${l.name}: ${v.errors.join(';')}`);if(!pack.descriptionOnly&&!pack.preserveProfileShape)l.profile=v.profile;}
  original=await chrome.storage.local.get(keys);

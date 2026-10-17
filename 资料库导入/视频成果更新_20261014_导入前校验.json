@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "stats": {
+    "videos": 18,
+    "totalViews": 770000,
+    "above10000": 6,
+    "aiAssistedAbove10000": 5,
+    "aiTopicViews": 110000,
+    "highestAbove": 500000
+  },
+  "appLibraryUnchanged": true,
+  "skillsAndInternshipsPreserved": true,
+  "libraries": [
+    {
+      "name": "默认资料库",
+      "projects": 10
+    },
+    {
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "projects": 4
+    },
+    {
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "projects": 5
+    }
+  ]
+}

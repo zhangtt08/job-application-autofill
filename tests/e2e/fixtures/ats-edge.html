@@ -1,0 +1,30 @@
+<!doctype html><html lang="zh-CN"><meta charset="UTF-8"><title>动态控件申请表</title>
+<style>body{font:16px sans-serif;padding:32px}section{margin:24px 0}label{display:block;margin:12px 0}input,select{padding:8px}fieldset{margin:12px 0}[contenteditable]{padding:10px;border:1px solid #aaa}[role=option]{padding:12px;cursor:pointer}</style>
+<h1>申请表</h1><form>
+<section><h2>基本信息</h2>
+<label>姓名<div><input id="name" name="fullname" value="解析旧姓名"></div></label>
+<label>邮箱<input id="email" type="email" value="old@example.com"></label>
+<fieldset><legend>性别</legend><label><input type="radio" name="gender" disabled value="未知">未知</label><label><input id="male" type="radio" name="gender" style="opacity:0" value="男">男</label><label><input id="female" type="radio" name="gender" style="display:none" value="女" checked>女</label></fieldset>
+</section>
+<section><h2>实习经历</h2><div class="internship-entry">
+<label>公司名称<input id="company" value="旧公司"></label>
+<label>工作职责<div id="duties" contenteditable="true"><div contenteditable="true">旧职责</div></div></label>
+<div><span class="field-label">开始时间</span><div class="date-parts" id="start"></div></div>
+</div></section>
+<section><h2>专业技能</h2><fieldset><legend>语言能力</legend><label><input id="cet4" type="checkbox" checked>英语CET-4</label><label><input id="cet6" type="checkbox" name="different">英语CET-6</label></fieldset></section>
+<button type="submit">提交申请</button></form>
+<script>
+window.submitClicks=0;window.remounts=0;
+document.querySelector('form').addEventListener('submit',e=>{e.preventDefault();window.submitClicks++;});
+function install(input){input.addEventListener('input',()=>{const next=input.cloneNode(true);next.value=input.value;input.replaceWith(next);window.remounts++;install(next);},{once:true});}install(document.querySelector('#name'));
+const fail=new URLSearchParams(location.search).has('fail');const start=document.querySelector('#start');
+if(fail){
+  start.innerHTML='<label>年份<select id="year"><option>2019</option><option>2026</option></select></label><label>月份<select id="month"><option>01</option><option>06</option></select></label>';
+  document.querySelector('#year').addEventListener('change',()=>{document.querySelector('#month').innerHTML=document.querySelector('#year').value==='2026'?'<option>02</option>':'<option>01</option><option>06</option>';});
+}else{
+  for(const [part,label,old,choices] of [['year','年份','2019',['2019','2026']],['month','月份','01月',['01月','06月']]]){
+    const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('input');input.id=part;input.readOnly=true;input.setAttribute('role','combobox');input.setAttribute('aria-label',label);input.setAttribute('aria-controls',part+'-options');input.value=old;wrap.append(input);start.append(wrap);
+    input.addEventListener('click',()=>{document.querySelector('[role=listbox]')?.remove();const menu=document.createElement('div');menu.id=part+'-options';menu.setAttribute('role','listbox');for(const value of choices){const option=document.createElement('div');option.setAttribute('role','option');option.textContent=value;option.addEventListener('click',()=>{input.value=value;input.dispatchEvent(new Event('change',{bubbles:true}));menu.remove();});menu.append(option);}document.body.append(menu);});
+  }
+}
+</script></html>

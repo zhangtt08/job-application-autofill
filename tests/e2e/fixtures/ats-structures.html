@@ -1,0 +1,28 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>通用招聘表单结构测试</title>
+<style>body{font:16px system-ui;margin:30px auto;max-width:880px}section,article{border:1px solid #ccc;padding:14px;margin:14px 0}.field{margin:12px 0}label{display:block}input,textarea,select{padding:6px;margin:5px}[contenteditable]{border:1px solid #aaa;min-height:70px;padding:8px}button{padding:8px}</style>
+<h1>招聘申请</h1><form><section id="basic"><h2>基本信息</h2><p>简历已解析</p><button type="button" id="basic-edit">编辑基本信息</button></section><section id="work"><h2>工作经历</h2></section>
+<section><h2>求职意向</h2><label for="cities">期望工作城市</label><select multiple id="cities"><option selected>北京</option><option>杭州</option><option>上海</option></select></section>
+<button type="submit">提交申请</button></form>
+<script>
+const family = new URL(location.href).searchParams.get('family') || 'native';
+const classes = {native:'field',ant:'ant-form-item',element:'el-form-item',custom:'resume-field'};
+const fieldClass=classes[family] || classes.native;
+window.editClicks=0;window.submitClicks=0;window.editorState={};window.nativeEditorInputs=0;
+document.querySelector('form').addEventListener('submit',event=>{event.preventDefault();window.submitClicks++});
+document.getElementById('basic-edit').onclick=()=>{window.editClicks++;document.getElementById('basic').innerHTML='<h2>基本信息</h2><div class="'+fieldClass+'"><label for="name-box">姓名</label><div id="name-box"><input id="name" value="解析旧姓名"></div></div><label>邮箱<input id="email" type="email" value="old@example.invalid"></label>'};
+function date(i,prefix,label){return '<div class="'+fieldClass+'"><span class="field-label">'+label+'</span><div class="date-parts"><select aria-label="年份" id="'+prefix+'y'+i+'">'+[2019,2020,2021,2022,2023,2024,2025,2026].map(y=>'<option value="year-'+y+'"'+(y===2019?' selected':'')+'>'+y+'年</option>').join('')+'</select><select aria-label="月份" id="'+prefix+'m'+i+'">'+Array.from({length:12},(_,m)=>'<option value="month-'+(m+1)+'"'+(m===0?' selected':'')+'>'+String(m+1).padStart(2,'0')+'月</option>').join('')+'</select></div></div>'}
+function mount(i){
+ if(family==='exclusive')for(let j=0;j<3;j++)if(j!==i){const other=document.getElementById('card'+j);other.innerHTML='<h3>解析旧公司'+j+'</h3><p>已有岗位、时间和职责</p><button type="button">编辑</button>';other.querySelector('button').onclick=()=>{window.editClicks++;mount(j)}}
+ const card=document.getElementById('card'+i);card.innerHTML='<h3>解析旧公司'+i+'</h3><label>公司名称<input id="company'+i+'" value="解析旧公司'+i+'"></label><label>岗位<input id="position'+i+'" value="旧岗位"></label>'+date(i,'start','开始时间')+date(i,'end','结束时间');
+ if(i>0){
+  const row=document.createElement('div');row.className=fieldClass;row.innerHTML='<label for="duty-box'+i+'">工作职责</label><div id="duty-box'+i+'"><div role="toolbar"><button type="button">加粗</button></div><span>0 / 1000字</span>'+(family==='native'?'<textarea id="duties'+i+'">旧职责</textarea>':'<div contenteditable="true" id="duties'+i+'"><p>旧职责</p><p>原第二段</p></div>')+'</div>';card.append(row);
+  if(family!=='native'){
+   const editor=document.getElementById('duties'+i);window.editorState[i]=editor.innerText;
+   editor.addEventListener('input',event=>{if(event.isTrusted){window.nativeEditorInputs++;window.editorState[i]=editor.innerText;}else{editor.innerText=window.editorState[i];}});
+  }
+ }
+}
+for(let i=0;i<3;i++){
+ const card=document.createElement('article');card.id='card'+i;card.className='work-item';card.innerHTML='<h3>解析旧公司'+i+'</h3><p>已有岗位、时间和职责</p><button type="button">编辑</button>';card.querySelector('button').onclick=()=>{window.editClicks++;mount(i)};document.getElementById('work').append(card);
+}
+</script></html>

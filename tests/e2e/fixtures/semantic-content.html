@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>测试公司 · 网申表单</title>
+<style>body{font:16px system-ui;max-width:680px;margin:24px auto}label{display:block;margin:16px 0}input,textarea{display:block;width:90%;padding:8px}textarea{height:64px}section{border-top:1px solid #ddd}</style>
+<form onsubmit="event.preventDefault()"><h1>申请表</h1>
+<section><h2>个人信息</h2><label>姓名<input id="applicant"></label></section>
+<section><h2>项目经历</h2><div class="entry">
+<label>项目名称<input id="project-name"></label>
+<label>描述<textarea id="description" name="summary" placeholder="请填写概述">旧概述：负责登录验证的工作职责</textarea></label>
+<label>概述<textarea id="summary" name="description">网站旧概述</textarea></label>
+<label>职责描述<textarea id="duties" name="summary">网站旧职责</textarea></label>
+<label>工作内容描述<textarea id="tasks" name="summary">网站旧内容</textarea></label>
+<label>成果描述<textarea id="results" name="description">网站旧成果</textarea></label>
+<label>背景介绍<textarea id="background" name="description">网站旧背景</textarea></label>
+<label>工作职责与工作内容<textarea id="combined">组合问题保留原文</textarea></label>
+</div></section>
+<button type="submit">提交申请</button></form>
+</html>

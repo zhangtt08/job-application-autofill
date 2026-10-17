@@ -65,6 +65,7 @@ export const defaultProfile: Profile = {
   projects: [
     {
       name: "",
+      link: "",
       role: "",
       startDate: "",
       endDate: "",

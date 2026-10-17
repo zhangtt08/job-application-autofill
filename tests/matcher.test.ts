@@ -36,6 +36,30 @@ function field(partial: { context?: Partial<RawFieldContext>; options?: string[]
   };
 }
 
+describe("经历正文按网页标签取值", () => {
+  it.each([
+    ["描述", "summary", "description"],
+    ["项目描述", "responsibilities", "description"],
+    ["概述", "description", "summary"],
+    ["请填写工作职责", "description", "responsibilities"],
+    ["职责描述", "summary", "responsibilities"],
+    ["工作内容描述", "summary", "workContent"],
+    ["成果描述", "description", "achievements"],
+    ["背景介绍", "description", "background"],
+  ])("%s 不被内部名称 %s 抢走", (labelText, name, slot) => {
+    expect(matchField(field({ context: { labelText, name, sectionTitle: "项目经历", placeholder: "请填写概述" } })).fieldId).toBe(`project.${slot}`);
+  });
+
+  it.each(["工作职责与工作内容", "职责及工作描述", "描述 / 概述"])("组合问题 %s 不擅自选一种内容", (labelText) => {
+    expect(matchField(field({ context: { labelText, sectionTitle: "实习经历" } })).fieldId).toBe("unknown");
+  });
+
+  it.each(["实习经历", "校园经历", "项目经历"])("%s 中的通用描述不填成职责", (sectionTitle) => {
+    const group = sectionTitle.startsWith("实习") ? "internship" : sectionTitle.startsWith("校园") ? "campus" : "project";
+    expect(matchField(field({ context: { labelText: "描述", name: "responsibilities", sectionTitle } })).fieldId).toBe(`${group}.description`);
+  });
+});
+
 describe("文本标准化", () => {
   it("去星号/冒号/空白", () => {
     expect(normalizeText("* 手机号码：")).toBe("手机号码");
@@ -116,7 +140,7 @@ describe("低置信度保护（验收 3）", () => {
     expect(m.confidence).toBe(0);
   });
 
-  it("『描述』裸词在语义拆分后不再强行归属（歧义 → unknown，fail-safe）", () => {
+  it("『描述』裸词需要经历板块才能确定归属", () => {
     // 语义拆分后「实习描述」「项目描述」各有明确词表，裸「描述」无法区分归属
     // → 两个候选同分冲突，宁可 unknown 让用户手动指派，绝不猜
     const noSection = matchField(field({ context: { labelText: "描述" } }));
@@ -125,7 +149,7 @@ describe("低置信度保护（验收 3）", () => {
     const withSection = matchField(
       field({ context: { labelText: "描述", sectionTitle: "实习经历" } }),
     );
-    expect(withSection.fieldId).toBe("unknown");
+    expect(withSection.fieldId).toBe("internship.description");
   });
 
   it("笼统描述栏有明确词 → 正确归属", () => {

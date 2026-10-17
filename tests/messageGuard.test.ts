@@ -301,6 +301,16 @@ describe("Background：tab 指令的来源校验（真实 listener）", () => {
     expect(sendsOf("SCAN_PAGE")).toHaveLength(0);
   });
 
+  it("添加实习栏按目标frame分发，切换标签页后不执行", async () => {
+    await import("../src/background/index");
+    await dispatch({ type: "ENSURE_INTERNSHIPS_TARGET", count: 3, frameId: 5, expectedTabId: 7, expectedUrl: PAGE }, PANEL_SENDER);
+    expect(current.tabSends.some((item) => item.frameId === 5 && item.msg.type === "ENSURE_INTERNSHIPS" && item.msg.count === 3)).toBe(true);
+    current.tabSends = [];
+    const rejected = await dispatch({ type: "ENSURE_INTERNSHIPS_TARGET", count: 3, frameId: 5, expectedTabId: 8, expectedUrl: PAGE }, PANEL_SENDER);
+    expect(rejected.response).toMatchObject({ ok: false, error: "页面已切换，请重新识别" });
+    expect(sendsOf("ENSURE_INTERNSHIPS")).toHaveLength(0);
+  });
+
   it("伪造 sender.id 的 FILL_TARGET：一次都不许写，且回包失败", async () => {
     await import("../src/background/index");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -379,6 +389,12 @@ vi.mock("../src/content/scanner", () => ({
   scanPageSettled: vi.fn(async () => []),
 }));
 
+vi.mock("../src/content/internshipEntries", () => ({
+  expandableExperienceGroups: vi.fn(() => []),
+  canAddInternships: vi.fn(() => false),
+  ensureInternshipEntries: vi.fn(async () => ({ ok: true, added: 2 })),
+}));
+
 describe("Content：写入侧的来源校验（真实 listener）", () => {
   it("Background（本扩展 worker）下发的 FILL_FIELDS：照常写", async () => {
     await import("../src/content/index");
@@ -429,6 +445,18 @@ describe("Content：写入侧的来源校验（真实 listener）", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     await dispatch({ type: "SCAN_PAGE" }, { id: "attacker-extension-id", url: WORKER });
     expect(scanner.scanPageSettled).toHaveBeenCalledTimes(0);
+  });
+
+  it("合法来源可以按指定条数添加实习栏；伪造来源不执行", async () => {
+    await import("../src/content/index");
+    const entries = await import("../src/content/internshipEntries");
+    const accepted = await dispatch({ type: "ENSURE_INTERNSHIPS", count: 3 }, { id: ID, url: BG });
+    expect(accepted.response).toMatchObject({ ok: true, added: 2 });
+    expect(entries.ensureInternshipEntries).toHaveBeenCalledWith(3, undefined);
+    vi.mocked(entries.ensureInternshipEntries).mockClear();
+    const rejected = await dispatch({ type: "ENSURE_INTERNSHIPS", count: 3 }, { id: "foreign", url: WORKER });
+    expect(rejected.response).toMatchObject({ ok: false, error: UNTRUSTED_SENDER });
+    expect(entries.ensureInternshipEntries).not.toHaveBeenCalled();
   });
 
   it("未知消息类型：不回包也不执行（与改动前一致）", async () => {

@@ -1,6 +1,7 @@
 /** DOM 工具：可见性、label 关联、指纹、指纹反查 */
 
 import { polarityMatches } from "../rules/yesNoAnswers";
+import { dateChoiceNumber, datePartFromHint } from '../utils/dateChoice';
 
 /** 「是/否」答案的同极性写法：选项匹配与写入回读共用同一份判定（见 yesNoAnswers 注释） */
 export { polarityMatches };
@@ -26,8 +27,15 @@ export function isRadioElement(el: Element | null): el is HTMLInputElement {
 export function isCheckboxElement(el: Element | null): el is HTMLInputElement {
   return isInputElement(el) && el.type === "checkbox";
 }
+export function isPeriodDateElement(el: Element | null): boolean {
+  return !!el?.matches(".atsx-date-picker-period-month > .atsx-date-picker-period-month-label");
+}
 export function isDatePickerElement(el: Element | null): boolean {
+  if (isPeriodDateElement(el)) return true;
+  if (isInputElement(el) && ["date", "month"].includes(el.type)) return true;
   if (!isInputElement(el) || !el.readOnly) return false;
+  const part = datePartFromHint(el.getAttribute('aria-label') ?? '', el.getAttribute('placeholder') ?? '', el.getAttribute('name') ?? '', el.id);
+  if (part && (el.getAttribute('role') === 'combobox' || el.closest('.ant-select,.el-select,.ivu-select,.atsx-select')) && !el.closest('.ant-picker,.el-date-editor')) return false;
   const ownProbe = [
     el.getAttribute("aria-haspopup") ?? "",
     el.getAttribute("class") ?? "",
@@ -50,6 +58,7 @@ export function isDatePickerElement(el: Element | null): boolean {
 export function isCustomSelectElement(el: Element | null): boolean {
   if (!el) return false;
   if (isInputElement(el) && isDatePickerElement(el)) return false;
+  if (isInputElement(el) && el.closest('.ant-select,.el-select,.ivu-select,.atsx-select,[class*="select-selector"],[class*="select-selection"],[role="combobox"]')) return true;
   const probe = [
     el.getAttribute("placeholder") ?? "",
     el.getAttribute("aria-label") ?? "",
@@ -72,6 +81,28 @@ function computedStyleOf(el: Element): CSSStyleDeclaration {
   return view.getComputedStyle(el);
 }
 
+/** 每个 frame 内递归开放的组件树，扫描、定位和弹层使用同一口径。 */
+export function queryAllOpenRoots<T extends Element = HTMLElement>(root: Document | ShadowRoot | Element, selector: string): T[] {
+  const out = Array.from(root.querySelectorAll<T>(selector));
+  const ownRoot = (root as Element).shadowRoot;
+  if (ownRoot) out.push(...queryAllOpenRoots<T>(ownRoot, selector));
+  for (const host of root.querySelectorAll("*")) {
+    if (host.shadowRoot) out.push(...queryAllOpenRoots<T>(host.shadowRoot, selector));
+  }
+  return out;
+}
+
+export function composedParent(el: Element): HTMLElement | null {
+  return (el.parentElement ?? (el.getRootNode() as ShadowRoot).host ?? null) as HTMLElement | null;
+}
+
+export function isDisabled(el: Element): boolean {
+  for (let node: Element | null = el; node; node = composedParent(node)) {
+    if (node.matches(':disabled,[aria-disabled="true"],[inert]')) return true;
+  }
+  return false;
+}
+
 /** 元素对用户是否可见（扫描过滤用） */
 export function isVisible(el: Element): boolean {
   // 只要 HTML 命名空间下的元素（排除 SVG / 文本节点）；不用 instanceof HTMLElement，
@@ -82,11 +113,11 @@ export function isVisible(el: Element): boolean {
   if (parseFloat(style.opacity || "1") === 0) return false;
 
   // 祖先链隐藏检查（父容器 display:none 等；jsdom 与真实浏览器均有效）
-  let node: Element | null = el.parentElement;
-  while (node && node !== el.ownerDocument?.documentElement) {
+  let node: Element | null = el;
+  while (node) {
     const s = computedStyleOf(node);
-    if (s.display === "none" || s.visibility === "hidden") return false;
-    node = node.parentElement;
+    if (s.display === "none" || s.visibility === "hidden" || parseFloat(s.opacity || "1") === 0 || node.matches('[aria-hidden="true"],[inert]')) return false;
+    node = composedParent(node);
   }
 
   // 布局检查：有布局引擎（真实浏览器）时 rect 全 0 视为不可见；
@@ -98,6 +129,19 @@ export function isVisible(el: Element): boolean {
     if (ownBody.getBoundingClientRect().width > 0) return false; // 有布局引擎但元素无尺寸 → 隐藏
   }
   return true;
+}
+
+/** 自绘单选/复选把原生 input 隐藏，用户实际看到的是同一控件的标签。 */
+export function visibleChoiceProxy(el: HTMLElement): HTMLElement | null {
+  if (!isRadioElement(el) && !isCheckboxElement(el)) return null;
+  if (el.getAttribute('aria-hidden') === 'true' || !el.parentElement || !isVisible(el.parentElement)) return null;
+  const root = el.getRootNode() as Document | ShadowRoot;
+  const label = el.closest('label') ?? (el.id ? root.querySelector<HTMLElement>(`label[for="${escapeSelector(el.id)}"]`) : null);
+  return label && isVisible(label) ? label : null;
+}
+
+export function isUsableChoice(el: HTMLInputElement): boolean {
+  return !isDisabled(el) && (isVisible(el) || visibleChoiceProxy(el) !== null);
 }
 
 /** CSS.escape 兼容（jsdom 未实现时降级） */
@@ -112,12 +156,21 @@ export function compactText(s: string | null | undefined, maxLen = 120): string 
   return s.replace(/\s+/g, " ").trim().slice(0, maxLen);
 }
 
+/** 控件已有内容和下拉选项不是字段名，也不应污染所在区域的语境。 */
+export function textOutsideControls(el: Element): string {
+  const walker = el.ownerDocument.createTreeWalker(el, 4, {
+    acceptNode: (node) => node.parentElement?.closest('input, textarea, select, button, script, style, [role="combobox"], [contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]') ? 2 : 1,
+  });
+  const parts: string[] = [];
+  while (walker.nextNode()) parts.push(walker.currentNode.textContent ?? "");
+  return parts.join("");
+}
+
 /** 直接包裹的 <label>（for 属性关联由 getLabelForElement 处理） */
 function wrapLabel(el: HTMLElement): string {
   const label = el.closest("label");
   if (!label) return "";
-  // 包裹式 label 的文字去掉控件自身 value/placeholder 影响（textContent 已排除 input）
-  return compactText(label.textContent);
+  return compactText(textOutsideControls(label));
 }
 
 /**
@@ -129,8 +182,10 @@ export function nearbyLabelText(el: HTMLElement): string {
   const hasControl = (node: Element) =>
     node.matches("input, textarea, select, [contenteditable='true'], [contenteditable=''], [contenteditable='plaintext-only']") ||
     node.querySelector("input, textarea, select, [contenteditable='true'], [contenteditable=''], [contenteditable='plaintext-only']") !== null;
-  const clean = (value: string): string =>
-    compactText(value.replace(/[\u200b\uFEFF]/g, "").replace(/^[*＊\s]+|[*＊\s:：]+$/g, ""), 80);
+  const clean = (value: string): string => {
+    const text = compactText(value.replace(/[\u200b\uFEFF]/g, "").replace(/^[*＊\s]+|[*＊\s:：]+$/g, ""), 80);
+    return /^\d+\s*\/\s*\d+\s*(?:字|characters?|words?)?$/i.test(text) ? '' : text;
+  };
   const semantic = (node: Element): string => {
     const tag = node.tagName.toLowerCase();
     const role = node.getAttribute("role") ?? "";
@@ -142,7 +197,7 @@ export function nearbyLabelText(el: HTMLElement): string {
       node.getAttribute("title");
     if (attributeLabel) return clean(attributeLabel);
     if (tag === "label" || role === "label" || /(label|caption|field[-_ ]?name|form[-_ ]?label|title)/i.test(hint)) {
-      return clean(node.textContent ?? "");
+      return clean(textOutsideControls(node));
     }
     return "";
   };
@@ -156,6 +211,7 @@ export function nearbyLabelText(el: HTMLElement): string {
     let sibling = node.previousElementSibling;
     let generic: string | undefined;
     for (let count = 0; sibling && count < 4; count++, sibling = sibling.previousElementSibling) {
+      if (sibling.matches('button,[role="toolbar"],[class*="toolbar"]')) continue;
       if (hasControl(sibling)) break;
       const semanticText = semantic(sibling);
       if (semanticText) return semanticText;
@@ -173,16 +229,17 @@ export function nearbyLabelText(el: HTMLElement): string {
     );
     if (directText && directText.length <= 40) return directText;
 
-    const allControls = parent.querySelectorAll("input, textarea, select, [contenteditable='true'], [role='combobox']");
+    const allControls = Array.from(parent.querySelectorAll("input, textarea, select, [contenteditable='true'], [role='combobox']"))
+      .filter((control) => !control.parentElement?.closest('[role="combobox"]'));
     if (allControls.length > 1) break;
     const parentLabel = semantic(parent);
     if (parentLabel && parentLabel.length <= 80) return parentLabel;
 
     // 北森字段行常有 5~7 层包装，字段名只存在于唯一控件容器的文本节点中。
     // 只接受「该容器只有一个表单控件」的短文本，避免把整段页面内容当标签。
-    const controls = parent.querySelectorAll("input, textarea, select, [contenteditable='true'], [role='combobox']");
+    const controls = allControls;
     if (controls.length === 1 && !isCustomSelectElement(el)) {
-      const containerText = clean(parent.textContent ?? "")
+      const containerText = clean(textOutsideControls(parent))
         .replace(clean(el.getAttribute("placeholder") ?? ""), "")
         .replace(clean(el.getAttribute("value") ?? ""), "");
       if (containerText && containerText.length <= 80) return containerText;
@@ -240,38 +297,61 @@ function htmlForLabel(el: HTMLElement): string {
   if (id) {
     // 标签属于控件自己的 document；同源 iframe 中不能查主文档。
     const label = root.querySelector(`label[for="${escapeSelector(id)}"]`);
-    if (label) return compactText(label.textContent);
+    if (label) return compactText(textOutsideControls(label));
   }
-  return wrapLabel(el) || el.getAttribute("aria-label") || ariaLabelledbyText(el) || nearbyLabelText(el);
+  const own = wrapLabel(el) || el.getAttribute("aria-label") || ariaLabelledbyText(el);
+  if (own) return own;
+  // UI 库常将 label[for] 绑定外层组件 ID，只在单字段容器内继承这个关联。
+  let parent = el.parentElement;
+  for (let depth = 0; parent && depth < 8 && !/^(BODY|HTML|FORM|SECTION)$/.test(parent.tagName); depth++, parent = parent.parentElement) {
+    if (parent.querySelectorAll('input:not([type="hidden"]),textarea,select,[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]').length !== 1) break;
+    const associated = parent.id && root.querySelector(`label[for="${escapeSelector(parent.id)}"]`);
+    const text = associated ? compactText(textOutsideControls(associated)) : parent.getAttribute('data-label') || parent.getAttribute('data-field-label');
+    if (text) return text;
+  }
+  return nearbyLabelText(el);
 }
 
 function ariaLabelledbyText(el: HTMLElement): string {
   const ids = el.getAttribute("aria-labelledby");
   if (!ids) return "";
   const doc = el.ownerDocument ?? document;
+  const root = el.getRootNode() as Document | ShadowRoot;
   const parts = ids
     .split(/\s+/)
-    .map((id) => doc.getElementById(id)?.textContent ?? "")
+    .map((id) => { const label = root.getElementById(id) ?? doc.getElementById(id); return label ? textOutsideControls(label) : ""; })
     .filter(Boolean);
   return compactText(parts.join(" "));
 }
 
-/** 最近的 section 标题：只认祖先容器的「直接子元素」heading，避免跨字段污染 */
-export function closestHeadingText(el: HTMLElement): string {
-  let node: HTMLElement | null = el.parentElement;
-  for (let depth = 0; depth < 8 && node; depth++) {
-    for (const child of node.children) {
-      if (/^H[1-6]$/.test(child.tagName)) return compactText(child.textContent);
-      const hint = `${child.id} ${typeof child.className === "string" ? child.className : ""}`;
-      const hasControl = child.querySelector("input, textarea, select, [role='combobox']") !== null;
-      if (!hasControl && /(section[-_ ]?title|form[-_ ]?title|panel[-_ ]?title|header|title|heading|caption)/i.test(hint)) {
-        const text = compactText(child.textContent, 80);
+/** 标题允许隔一层无控件的标题包装，飞书把段落标题放在 left > title > p 中。 */
+export function sectionHeadingText(node: Element): string {
+  for (const child of node.children) {
+    if (child.matches("input,textarea,select,[role=combobox]") || child.querySelector("input,textarea,select,[role=combobox]")) continue;
+    const heads = [child, ...Array.from(child.querySelectorAll('h1,h2,h3,h4,h5,h6,legend,[role=heading],[class*=title i],[class*=heading i],[class*=caption i]'))];
+    for (const head of heads) {
+      const hint = `${head.id} ${typeof head.className === "string" ? head.className : ""}`;
+      if (/^(H[1-6]|LEGEND)$/.test(head.tagName) || head.getAttribute("role") === "heading" || /header|title|heading|caption/i.test(hint)) {
+        const text = compactText(textOutsideControls(head), 80);
         if (text) return text;
       }
     }
-    node = node.parentElement;
   }
   return "";
+}
+
+/** 深层表单组件也能找到本板块标题；到 form 为止，不借其他板块的标题。 */
+export function closestHeadingText(el: HTMLElement): string {
+  let node: HTMLElement | null = composedParent(el);
+  let nearest = '';
+  for (let depth = 0; depth < 16 && node; depth++) {
+    const text = sectionHeadingText(node);
+    if (text && !nearest) nearest = text;
+    if (text && /^(?:(?:教育|学历|实习|工作|校园|项目)(?:经历|背景|经验|信息|情况)|基本信息|个人信息|个人资料|联系方式|education(?:\s+(?:history|background))?|work\s+experience|internship(?:\s+experience)?|projects?|campus(?:\s+experience)?|personal\s+information)\s*\d*$/i.test(text)) return text;
+    if (/^(FORM|BODY|HTML)$/.test(node.tagName)) break;
+    node = composedParent(node);
+  }
+  return nearest;
 }
 
 /** 所属 fieldset 的 legend（仅限本字段所在 fieldset 的直接 legend） */
@@ -292,8 +372,16 @@ export function structuralPathOf(el: HTMLElement): number[] {
   const parts: number[] = [];
   const doc = el.ownerDocument ?? document;
   let node: HTMLElement | null = el;
-  for (let depth = 0; node && node !== doc.body && node.parentElement && depth < 24; depth++, node = node.parentElement) {
-    parts.unshift(Array.from(node.parentElement.children).indexOf(node));
+  for (let depth = 0; node && node !== doc.body && depth < 48; depth++) {
+    if (node.parentElement) {
+      parts.unshift(Array.from(node.parentElement.children).indexOf(node));
+      node = node.parentElement;
+    } else {
+      const root = node.getRootNode() as ShadowRoot;
+      if (!root.host) break;
+      parts.unshift(-1, Array.from(root.children).indexOf(node));
+      node = root.host as HTMLElement;
+    }
   }
   return parts;
 }
@@ -304,7 +392,7 @@ export function structuralPathOf(el: HTMLElement): number[] {
  * placeholder 必须入指纹：大量招聘网站表单（如姚记 ATS）的 input 无 name/id/label，
  * 字段之间只靠 placeholder 区分——漏掉它会导致所有指纹雷同、定位/回写命中第一个输入框。
  */
-const scannedElements = new Map<string, WeakRef<HTMLElement>>();
+const scannedElements = new Map<string, { element: WeakRef<HTMLElement>; parent?: WeakRef<Node> }>();
 
 export function fingerprintOf(el: HTMLElement): string {
   const tag = el.tagName.toLowerCase();
@@ -318,7 +406,7 @@ export function fingerprintOf(el: HTMLElement): string {
   const sameKind = collectSameKindElements(tag);
   const idx = sameKind.indexOf(el);
   const reference = JSON.stringify({ tag, type, name, id, label, placeholder, idx, path: structuralPathOf(el) });
-  scannedElements.set(reference, new WeakRef(el));
+  scannedElements.set(reference, { element: new WeakRef(el), ...(el.parentNode ? { parent: new WeakRef(el.parentNode) } : {}) });
   if (scannedElements.size > 5000) scannedElements.delete(scannedElements.keys().next().value!);
   return reference;
 }
@@ -331,24 +419,13 @@ export function fingerprintOf(el: HTMLElement): string {
 export function collectSameKindElements(tag: string): HTMLElement[] {
   const out: HTMLElement[] = [];
   const pushDoc = (doc: Document) => {
-    out.push(...(Array.from(doc.querySelectorAll(`body ${tag}`)) as HTMLElement[]));
-    // open shadowRoot 递归
-    for (const host of Array.from(doc.querySelectorAll("*"))) {
-      const root = (host as HTMLElement).shadowRoot;
-      if (root) {
-        out.push(...(Array.from(root.querySelectorAll(tag)) as HTMLElement[]));
-        for (const nested of Array.from(root.querySelectorAll("*"))) {
-          const nestedRoot = (nested as HTMLElement).shadowRoot;
-          if (nestedRoot) out.push(...(Array.from(nestedRoot.querySelectorAll(tag)) as HTMLElement[]));
-        }
-      }
-    }
+    out.push(...queryAllOpenRoots<HTMLElement>(doc, tag));
     // same-origin iframe 递归
     for (const frame of Array.from(doc.querySelectorAll("iframe"))) {
       try {
         const child = frame.contentDocument;
         if (child) {
-          out.push(...(Array.from(child.querySelectorAll(tag)) as HTMLElement[]));
+          pushDoc(child);
         }
       } catch {
         // cross-origin：跳过
@@ -386,8 +463,9 @@ function matchesFingerprintAttributes(
 export function findElementByFingerprint(fp: string): HTMLElement | null {
   const remembered = scannedElements.get(fp);
   if (remembered) {
-    const element = remembered.deref();
-    return element?.isConnected ? element : null;
+    const element = remembered.element.deref();
+    if (element?.isConnected) return element;
+    if (!remembered.parent?.deref()?.isConnected) return null;
   }
   try {
     const parsed = JSON.parse(fp) as {
@@ -397,6 +475,15 @@ export function findElementByFingerprint(fp: string): HTMLElement | null {
     // 与 fingerprintOf 相同口径：同类元素全量列表（主文档 + shadowRoot + same-origin iframe）
     const sameKind = collectSameKindElements(parsed.tag);
     const matched = sameKind.filter((el) => matchesFingerprintAttributes(el, parsed));
+    if (remembered) {
+      if (!parsed.id && !parsed.name) return null;
+      const replacement = matched.filter(el => el.parentNode === remembered.parent?.deref() &&
+        JSON.stringify(structuralPathOf(el)) === JSON.stringify(parsed.path));
+      if (replacement.length !== 1) return null;
+      const live = replacement[0]!;
+      scannedElements.set(fp, { element: new WeakRef(live), parent: remembered.parent });
+      return live;
+    }
     if (matched.length === 0) {
       // 属性零命中：只有「本来就没有任何可辨识属性」的控件才允许按同类序号兜底。
       // 有 name/id/label 却匹配不上 = 那个字段已经消失，此时按序号猜会把值写进邻居控件
@@ -490,6 +577,12 @@ export function getRadioGroup(el: HTMLInputElement): HTMLInputElement[] {
 export function getCheckboxGroup(el: HTMLInputElement): HTMLInputElement[] {
   const name = el.getAttribute("name");
   const root = el.getRootNode() as Document | ShadowRoot;
+  const scope = el.closest('fieldset,[role="group"]');
+  if (scope && (scope.querySelector(':scope > legend') || scope.hasAttribute('aria-label') || scope.hasAttribute('aria-labelledby'))) {
+    const grouped = Array.from(scope.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).filter(item =>
+      item.closest('fieldset,[role="group"]') === scope && item.form === el.form);
+    if (grouped.length) return grouped;
+  }
   if (!name) {
     // 无 name 的独立勾选框（「接受调剂」「是否同意」这类单项勾选）
     return isCheckboxElement(el) ? [el] : [];
@@ -502,18 +595,18 @@ export function getCheckboxGroup(el: HTMLInputElement): HTMLInputElement[] {
 /** 自定义下拉真正回显给用户的那段文字（各 UI 库的选中态容器并集） */
 function customSelectDisplayText(el: HTMLElement): string {
   const fromValue = isInputElement(el) ? el.value.trim() : "";
-  if (fromValue) return fromValue;
-  const scope =
-    el.closest<HTMLElement>('[class*="select"], [class*="Select"], [class*="picker"], [class*="cascader"], [role="combobox"]') ??
-    el.parentElement;
-  if (scope) {
+  let scope: HTMLElement | null = el;
+  for (let depth = 0; scope && depth < 5; depth++, scope = scope.parentElement) {
+    if (/^(BODY|HTML|FORM)$/.test(scope.tagName)) break;
+    if (scope.querySelectorAll('input,textarea,select,[role="combobox"]').length > 1) break;
     const item = scope.querySelector<HTMLElement>(
       '.ant-select-selection-item, .el-select__placeholder:not(.is-transparent), .el-select__selected-item, ' +
-        '.ivu-select-selected-value, [class*="selection-item"], [class*="selection__value"], [class*="select-value"]',
+        '.ivu-select-selected-value, .vs__selected, .select2-selection__rendered, [class*="singleValue"], [class*="single-value"], [class*="selection-item"], [class*="selection__value"], [class*="selection-selected-value"], [class*="select-value"]',
     );
     const text = item?.getAttribute("title") || compactText(item?.textContent ?? "", 60);
-    if (text) return text;
+    if (text && item && isVisible(item)) return text;
   }
+  if (fromValue) return fromValue;
   return compactText(el.textContent ?? "", 60) || (el.getAttribute("aria-label") ?? "");
 }
 
@@ -523,6 +616,11 @@ function customSelectDisplayText(el: HTMLElement): string {
  * 读 input.value 恒为空，于是真机上一大批下拉全部被判成填写失败。
  */
 export function readDisplayValue(el: HTMLElement): string {
+  if (isPeriodDateElement(el)) {
+    const year = el.querySelector("[data-cy=year]")?.textContent?.trim();
+    const month = el.querySelector("[data-cy=month]")?.textContent?.trim();
+    return year && month ? `${year}-${month}` : /至今/.test(el.textContent ?? "") ? "至今" : "";
+  }
   if (isRadioElement(el)) {
     const checked = getRadioGroup(el).find((item) => item.checked);
     return checked ? htmlForLabel(checked) || checked.value : "";
@@ -540,10 +638,10 @@ export function readDisplayValue(el: HTMLElement): string {
   }
   if (isInputElement(el) || isTextAreaElement(el)) {
     // 只读 input 驱动的自定义下拉：值在兄弟节点的文本里，input.value 恒为空
-    if (!el.value && isCustomSelectElement(el)) return customSelectDisplayText(el);
+    if (isCustomSelectElement(el)) return customSelectDisplayText(el);
     return el.value;
   }
-  if (el.isContentEditable) return el.textContent ?? "";
+  if (el.isContentEditable) return el.innerText ?? el.textContent ?? "";
   if (isCustomSelectElement(el)) return customSelectDisplayText(el);
   return customSelectDisplayText(el);
 }
@@ -563,6 +661,14 @@ export function valueMatchesRequested(el: HTMLElement, requested: string): boole
   }
   // 原生 select 的「值」是 option 的 value，用户看到的是文本，两者都算填对了
   if (isSelectElement(el)) {
+    if (el.multiple) {
+      const terms = [...new Set(requested.split(/[、\n;；]+/).map(term => term.trim()).filter(Boolean))];
+      const selected = Array.from(el.selectedOptions);
+      return selected.length === terms.length && terms.every(term => selected.some(option =>
+        option.value === term || normalizeChoice(option.textContent ?? '') === normalizeChoice(term) ||
+        polarityMatches(term, option.textContent ?? '') || (normalizeChoice(term).length >= 2 && normalizeChoice(option.textContent ?? '').includes(normalizeChoice(term))),
+      ));
+    }
     const selected = el.selectedOptions[0];
     if (selected) {
       if (selected.value === requested.trim()) return true;
@@ -572,8 +678,18 @@ export function valueMatchesRequested(el: HTMLElement, requested: string): boole
   const actual = readDisplayValue(el);
   const got = normalizeChoice(actual);
   if (got === want) return true;
+  if (isCustomSelectElement(el)) {
+    const part = datePartFromHint(htmlForLabel(el), el.getAttribute('placeholder') ?? '', el.getAttribute('name') ?? '', el.id);
+    const number = part ? dateChoiceNumber(requested, part) : undefined;
+    if (part && number !== undefined && dateChoiceNumber(actual, part) === number) return true;
+  }
+  if (isPeriodDateElement(el)) {
+    const nd = normalizeDate(requested);
+    return /^\d{4}-\d{2}(?:-\d{2})?$/.test(nd) && normalizeDate(actual) === nd.slice(0, 7);
+  }
   if (isDatePickerElement(el)) {
     const nd = normalizeDate(requested);
+    if (isInputElement(el) && el.type === "month" && /^\d{4}-\d{2}(?:-\d{2})?$/.test(nd)) return normalizeDate(actual) === nd.slice(0, 7);
     if (nd && normalizeDate(actual) === nd) return true;
   }
   // 「是/否」答案写进了「可以接受 / 不接受」这样的选项：属于填对了。

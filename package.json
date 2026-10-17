@@ -5,7 +5,7 @@
   "description": "网申助手：识别表单 → 选择资料库 → 覆盖填写。",
   "type": "module",
   "scripts": {
-    "build": "npm run build:sidepanel && npm run build:content && npm run build:background",
+    "build": "npm run build:sidepanel && npm run build:content && npm run build:background && node scripts/portable-files.mjs",
     "build:sidepanel": "vite build --mode sidepanel",
     "build:content": "vite build --mode content",
     "build:background": "vite build --mode background",

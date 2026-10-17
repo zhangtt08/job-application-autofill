@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "liveStorageReadback": true,
+  "appUnchanged": true,
+  "internshipsSkillsAndProjectCountsPreserved": true,
+  "backup": "导入前原资料库_2026-10-14T15-08-08-317Z.json",
+  "libraries": [
+    {
+      "name": "默认资料库",
+      "projects": 10
+    },
+    {
+      "name": "AIGC 创作｜视觉内容｜创作工具",
+      "projects": 4
+    },
+    {
+      "name": "AI 运营｜产品运营｜SEO / GEO",
+      "projects": 5
+    }
+  ]
+}

@@ -198,6 +198,7 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   // 语义拆分：职责/内容/业绩/总结各有独立词表，表单问什么就填什么，
   // 不再全挤进 description 按长度取。description 仅作「经历描述」类兜底。
   "internship.description": [
+    "描述", "description",
     "实习描述", "实习内容", "实习经历描述", "实习介绍",
     "工作描述", "经历描述", "工作经历描述", "实践内容", "实践描述",
     "internship description", "work description", "job description",
@@ -219,6 +220,7 @@ export const FIELD_ALIASES: Record<string, string[]> = {
     "achievements", "work achievements", "work highlights", "key achievements",
   ],
   "internship.summary": [
+    "概述", "总结", "summary",
     "实习总结", "实习收获", "工作收获", "实习心得", "心得体会", "收获与体会", "总结与收获",
     "internship summary", "internship reflection",
   ],
@@ -243,6 +245,7 @@ export const FIELD_ALIASES: Record<string, string[]> = {
     "campus end",
   ],
   "campus.description": [
+    "描述", "description",
     "校园经历描述", "社团活动描述", "校园实践描述", "实践经历",
     "课外活动", "校园活动", "活动描述", "校园经历", "社团经历", "学生工作经历",
     "campus experience description", "activity description", "student activities",
@@ -261,6 +264,7 @@ export const FIELD_ALIASES: Record<string, string[]> = {
     "activity achievements",
   ],
   "campus.summary": [
+    "概述", "总结", "summary",
     "活动总结", "活动收获", "实践总结", "校园经历总结", "社团活动总结",
     "campus summary",
   ],
@@ -274,6 +278,7 @@ export const FIELD_ALIASES: Record<string, string[]> = {
     "项目名称", "项目", "项目名", "项目/课题名称", "课题名称", "项目题目",
     "project name", "project", "project title",
   ],
+  "project.link": ["项目链接", "项目网址", "项目地址", "project link", "project url", "project website"],
   "project.role": [
     "项目角色", "担任角色", "你的角色", "角色", "项目中角色", "承担角色", "项目职务", "项目职位", "项目中的职务", "职务",
     "project role", "your role", "position in project",
@@ -288,7 +293,7 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   ],
   "project.description": [
     "项目描述", "项目介绍", "项目简介", "项目详情", "项目经历描述",
-    "project description", "project detail", "project experience", "description",
+    "project description", "project detail", "project experience", "description", "描述",
   ],
   "project.background": [
     "项目背景", "项目背景介绍", "背景介绍",
@@ -307,8 +312,8 @@ export const FIELD_ALIASES: Record<string, string[]> = {
     "project achievements", "project highlights",
   ],
   "project.summary": [
-    "项目概述", "项目总结",
-    "project summary",
+    "项目概述", "项目总结", "概述", "总结",
+    "project summary", "summary",
   ],
 
   "skills.technical": [

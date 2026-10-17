@@ -13,6 +13,21 @@ function inject(html: string): void {
   document.body.innerHTML = html;
 }
 
+it("旧正文、下拉选项和可编辑内容不混入标签或父容器语境", () => {
+  inject(`<section><h2>项目经历</h2>
+    <label>描述<textarea id="desc">概述：登录验证相关工作职责</textarea></label>
+    <label for="degree">学历<select id="degree"><option>本科</option><option>硕士</option></select></label>
+    <div class="form-label">职责<div contenteditable="true" id="editable">概述和成果</div></div>
+  </section>`);
+  const fields = scanPage();
+  const description = fields.find((f) => f.context.id === "desc")!;
+  expect(description.context.labelText).toBe("描述");
+  expect(description.context.parentText).toBe("描述");
+  expect(description.context.currentValue).toBe("概述：登录验证相关工作职责");
+  expect(fields.find((f) => f.context.id === "degree")?.context.labelText).toBe("学历");
+  expect(fields.find((f) => f.context.id === "editable")?.context.labelText).toBe("职责");
+});
+
 // jsdom 无布局引擎：getBoundingClientRect 恒为 0。真实浏览器有布局，此处仅为测试补桩。
 beforeAll(() => {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({

@@ -1,9 +1,11 @@
 import type { ContextAncestorSignal, FieldKind, RawField, RawFieldContext } from "../types/field";
 import { collectZoneHits } from "../context/applicationContext";
+import { dateControlContext } from "./dateControls";
 import {
   ariaLabelledbyText,
   closestHeadingText,
   compactText,
+  composedParent,
   fieldsetLegendText,
   fingerprintOf,
   groupTitleFor,
@@ -12,10 +14,14 @@ import {
   htmlForLabel,
   isCustomSelectElement,
   isDatePickerElement,
+  isPeriodDateElement,
+  readDisplayValue,
   isInputElement,
+  isUsableChoice,
   isSelectElement,
   isTextAreaElement,
   structuralPathOf,
+  textOutsideControls,
 } from "./domUtils";
 
 /** 语境信号最多往上采 6 层，且不越过 body/html（§十一：绝不以 document.body 全文为准）。
@@ -37,7 +43,7 @@ function ownTitleText(el: HTMLElement): string {
   for (const head of Array.from(el.children)) {
     const tag = head.tagName.toLowerCase();
     if (/^h[1-6]$/.test(tag) || tag === "legend" || tag === "label" || /title|heading|caption/i.test(String(head.className))) {
-      parts.push(head.textContent ?? "");
+      parts.push(textOutsideControls(head));
     }
   }
   return parts.join(" ");
@@ -46,7 +52,7 @@ function ownTitleText(el: HTMLElement): string {
 /** 由近及远采集祖先结构信号。近处读整块文本（那就是面板本身），远处只读它自己的标题 */
 function collectAncestorSignals(el: HTMLElement): ContextAncestorSignal[] {
   const out: ContextAncestorSignal[] = [];
-  let cur = el.parentElement;
+  let cur = composedParent(el);
   for (let depth = 1; cur && depth <= CONTEXT_ANCESTOR_DEPTH; depth++) {
     const tag = cur.tagName.toLowerCase();
     const role = cur.getAttribute("role") ?? "";
@@ -62,12 +68,12 @@ function collectAncestorSignals(el: HTMLElement): ContextAncestorSignal[] {
     // body/html 永远只取它自己的标题：否则「页面上别处有登录二字」会变成这个控件的近邻信号。
     // 其余容器只要文本量不大就读全文——认证/申请语境常常写在祖先 div 的整块文本里。
     const isRoot = tag === "body" || tag === "html";
-    const fullText = cur.textContent ?? "";
+    const fullText = textOutsideControls(cur);
     const scopeText = !isRoot && fullText.length <= CONTEXT_LOCAL_TEXT_LIMIT ? fullText : ownTitleText(cur);
     out.push({ depth, tag, role, hints, hits: collectZoneHits(scopeText) });
     if (["form", "fieldset", "section", "article", "dialog"].includes(tag) || role === "dialog" || role === "search") break;
     if (isRoot) break;
-    cur = cur.parentElement;
+    cur = composedParent(cur);
   }
   return out;
 }
@@ -107,21 +113,38 @@ function collectSiblingLabels(el: HTMLElement): string[] {
 
 /** 重复经历按容器分组，缺少某一栏时也不把后面的字段拉到上一条经历。 */
 function entryGroupOf(el: HTMLElement): string | undefined {
-  const selector = "input:not([type=hidden]), textarea, select";
+  const selector = 'input:not([type=hidden]),textarea,select,[role="combobox"],[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]';
+  const controlsOf = (scope: Element) => Array.from(scope.querySelectorAll<HTMLElement>(selector)).filter(control => !control.parentElement?.closest('[role="combobox"],[contenteditable="true"],[contenteditable=""],[contenteditable="plaintext-only"]'));
+  const anchor = /公司|单位|学校|院校|项目名|组织|社团|雇主|\b(?:company|employer|school|university|organization|project name)\b/i;
   let node = el.parentElement;
-  for (let depth = 0; node?.parentElement && depth < 8; depth++, node = node.parentElement) {
+  for (let depth = 0; node?.parentElement && depth < 16; depth++, node = node.parentElement) {
     if (/^(FORM|BODY|HTML)$/.test(node.tagName)) break;
-    const controls = Array.from(node.querySelectorAll<HTMLElement>(selector));
+    const controls = controlsOf(node);
     const explicitEntry = /(^|[\s_-])(entry|experience|education)([\s_-]|$)/i.test(String(node.className)) && !/^(INPUT|TEXTAREA|SELECT)$/.test(node.tagName);
-    if (controls.length < (explicitEntry ? 1 : 2)) continue;
+    if (!controls.length) continue;
     const labels = new Set(controls.map((control) => htmlForLabel(control)).filter(Boolean));
+    if (!explicitEntry && !Array.from(labels).some(label => anchor.test(label))) continue;
     const peers = Array.from(node.parentElement.children).filter((peer) => peer !== node && peer.tagName === node!.tagName);
     const repeated = peers.some((peer) => {
-      const others = Array.from(peer.querySelectorAll<HTMLElement>(selector));
-      if (others.length < (explicitEntry ? 1 : 2)) return false;
-      return others.filter((control) => labels.has(htmlForLabel(control))).length >= (explicitEntry ? 1 : 2);
+      const others = controlsOf(peer);
+      if (!others.length) return false;
+      return others.some(control => labels.has(htmlForLabel(control)) && (explicitEntry || anchor.test(htmlForLabel(control))));
     });
     if (repeated) return JSON.stringify(structuralPathOf(node));
+  }
+  return undefined;
+}
+
+function entryOrdinalOf(el: HTMLElement): number | undefined {
+  const marker = /^(?:entry|(?:work|experience|resume|project|education)[-_]item)(?:$|[_-])/i;
+  let node = el.parentElement;
+  for (let depth = 0; node?.parentElement && depth < 16; depth++, node = node.parentElement) {
+    if (/^(FORM|BODY|HTML)$/.test(node.tagName)) break;
+    const tokens = Array.from(node.classList).filter(token => marker.test(token));
+    if (!tokens.length && !node.hasAttribute('data-entry')) continue;
+    const peers = Array.from(node.parentElement.children).filter(peer => peer.tagName === node!.tagName &&
+      (tokens.some(token => peer.classList.contains(token)) || (node!.hasAttribute('data-entry') && peer.hasAttribute('data-entry'))));
+    if (peers.length > 1) return peers.indexOf(node);
   }
   return undefined;
 }
@@ -134,6 +157,7 @@ export function extractContext(el: HTMLElement, groupLabelOverride = ""): RawFie
   const select = isSelectElement(el) ? el : null;
 
   const labelText = htmlForLabel(el);
+  const dateContext = dateControlContext(el);
   const ariaLabel =
     el.getAttribute("aria-label") ?? ariaLabelledbyText(el) ?? "";
   const placeholder = el.getAttribute("placeholder") ?? "";
@@ -157,7 +181,7 @@ export function extractContext(el: HTMLElement, groupLabelOverride = ""): RawFie
   // 近距离父容器文字（向上 2 层，截断；用于 Level 3 综合判断，噪音权重低）
   const local = el.parentElement;
   const parentText = local && local.querySelectorAll("input, textarea, select, [role=combobox]").length <= 1
-    ? compactText(local.textContent, 200) : "";
+    ? compactText(textOutsideControls(local), 200) : "";
 
   // 只读地取 number 控件步长（读属性而非 IDL，避免默认值口径分歧）：
   // 非数字控件 = undefined（不适用）；step="any" = null（不设限）；其余按属性值，缺省/非法按 HTML 默认 1
@@ -174,7 +198,7 @@ export function extractContext(el: HTMLElement, groupLabelOverride = ""): RawFie
   return {
     // radio/checkbox 组：组标题（「性别」「语言能力」）才是字段名，
     // 选项文本（男 / CET-6）走 options 信号，不能当 label 用。
-    labelText: groupLabelOverride || labelText,
+    labelText: groupLabelOverride || dateContext.labelText || labelText,
     groupLabel: groupLabelOverride,
     placeholder,
     ariaLabel,
@@ -192,6 +216,10 @@ export function extractContext(el: HTMLElement, groupLabelOverride = ""): RawFie
       ? "custom-select"
       : input?.type ?? (textarea ? "textarea" : select ? "select-one" : "contenteditable"),
     entryGroup: entryGroupOf(el),
+    entryOrdinal: entryOrdinalOf(el),
+    datePart: dateContext.datePart,
+    datePrecision: dateContext.datePrecision,
+    dateGroup: dateContext.dateGroup,
     // input 与 textarea 都支持 maxlength 属性（此前漏了 textarea，导致字数约束检查失效）
     maxLength:
       (input ?? textarea) && (input ?? textarea)!.maxLength > 0 ? (input ?? textarea)!.maxLength : null,
@@ -199,7 +227,7 @@ export function extractContext(el: HTMLElement, groupLabelOverride = ""): RawFie
     required: el.hasAttribute("required") || el.getAttribute("aria-required") === "true",
     disabled: input?.disabled ?? textarea?.disabled ?? select?.disabled ?? false,
     readOnly: input?.readOnly ?? textarea?.readOnly ?? false,
-    currentValue: input?.value ?? textarea?.value ?? select?.value ?? (el.textContent ?? "").trim(),
+    currentValue: isCustomSelectElement(el) ? readDisplayValue(el) : input?.value ?? textarea?.value ?? select?.value ?? (el.textContent ?? "").trim(),
     ancestorSignals: collectAncestorSignals(el),
     siblingLabels: collectSiblingLabels(el),
   };
@@ -216,8 +244,8 @@ export function extractSelectOptions(select: HTMLSelectElement): string[] {
 /** radio/checkbox 组：同 name 的所有 input，选项文本取各自 label */
 export function radioGroupElements(input: HTMLInputElement): HTMLInputElement[] | null {
   const name = input.getAttribute("name");
-  if (!name) return null;
   const group = input.type === "radio" ? getRadioGroup(input) : getCheckboxGroup(input);
+  if (!name && (input.type !== 'checkbox' || group.length < 2)) return null;
   return group.length > 0 ? group : null;
 }
 
@@ -261,19 +289,27 @@ export function buildRawField(el: HTMLElement): RawField | null {
   if (kind === "radio" || kind === "checkbox") {
     const input = el as HTMLInputElement;
     const group = radioGroupElements(input);
-    if (!group || !group[0]) return null;
-    representative = group[0];
-    options = radioGroupOptions(group);
+    const usable = group?.filter(isUsableChoice) ?? [];
+    if (!usable[0]) return null;
+    representative = usable[0];
+    options = radioGroupOptions(usable);
     groupLabel = groupTitleFor(representative);
   } else if (kind === "select" && isSelectElement(el)) {
     options = extractSelectOptions(el);
+  }
+
+  const context = extractContext(representative, groupLabel);
+  if (isPeriodDateElement(el)) {
+    const endpoints = Array.from(el.parentElement!.querySelectorAll(".atsx-date-picker-period-month-label"));
+    context.labelText = endpoints.indexOf(el) === 0 ? "开始时间" : "结束时间";
+    context.currentValue = readDisplayValue(el);
   }
 
   // 指纹必须基于组代表（radio 组内每个 input 都指向同一指纹）
   return {
     reference: fingerprintOf(representative),
     kind,
-    context: extractContext(representative, groupLabel),
+    context,
     options,
   };
 }

@@ -95,6 +95,7 @@ test("忽略的字段不会随其他编辑再次写入", async () => {
   await recognize();
   await sidePanel.getByRole("button", { name: "撤销填写", exact: true }).click();
   await expect(page.locator("#name")).toHaveValue("");
+  await expect(sidePanel.locator(".count-filled strong")).toHaveText("0");
   await revealPreview(sidePanel);
   await card("姓名").click();
   await card("姓名").getByRole("button", { name: /忽略/ }).first().click();

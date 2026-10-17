@@ -11,6 +11,15 @@ describe("profile schema 校验", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("项目链接兼容旧资料并拒绝非字符串", () => {
+    const p = structuredClone(defaultProfile);
+    delete p.projects[0]!.link;
+    const result = validateProfile(p);
+    expect(result.ok && result.profile.projects[0]?.link).toBe("");
+    (p.projects[0] as unknown as {link:unknown}).link = 123;
+    expect(validateProfile(p).ok).toBe(false);
+  });
+
   it("非对象根节点拒绝", () => {
     expect(validateProfile("not-json-object").ok).toBe(false);
     expect(validateProfile(null).ok).toBe(false);
@@ -191,6 +200,10 @@ describe("profileResolver", () => {
     expect(resolveValue("internship.workContent", profile)?.value).toBe("内容");
     expect(resolveValue("internship.achievements", profile)?.value).toBe("业绩");
     expect(resolveValue("internship.summary", profile)?.value).toBe("总结");
+    expect(resolveValue("internship.responsibilities", profile)).toMatchObject({ editable: true, sourcePath: "internships[0].responsibilities" });
+    const missingDescription = structuredClone(profile);
+    missingDescription.internships[0]!.description = "";
+    expect(resolveValue("internship.description", missingDescription)).toBeUndefined();
   });
 });
 

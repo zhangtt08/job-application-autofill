@@ -141,7 +141,7 @@ function firstRec(root: Rec, keys: readonly string[]): Rec {
  * 旧版 {短描述,中描述,长描述} / {short,medium,long} 块 → 取内容最全的一段迁移。
  */
 function pickDesc(e: Rec): string {
-  const direct = e["描述"] ?? e.description;
+  const direct = e["描述"] ?? e.description ?? e["实习描述"] ?? e["工作描述"] ?? e["校园经历描述"] ?? e["项目描述"] ?? e["项目介绍"] ?? e["项目简介"];
   if (typeof direct === "string") return str(direct);
   if (typeof e.descriptionShort === "string" || typeof e.descriptionMedium === "string" || typeof e.descriptionLong === "string") {
     return str(e.descriptionLong) || str(e.descriptionMedium) || str(e.descriptionShort);
@@ -150,63 +150,13 @@ function pickDesc(e: Rec): string {
   return str(d["长描述"] ?? d.long) || str(d["中描述"] ?? d.medium) || str(d["短描述"] ?? d.short);
 }
 
-const SECTION_LABELS: Record<string, string> = {
-  summary: "概述",
-  responsibilities: "工作职责",
-  work_content: "工作内容",
-  achievements: "主要业绩",
-  background: "项目背景",
-  core_features: "核心功能",
-  architecture_logic: "架构逻辑",
-  design_principle: "设计原则",
-  current_limitations: "当前局限",
-  content_methodology: "内容方法",
-  tools: "工具",
-  development_tools: "开发工具",
-  courses: "主修课程",
-};
-
-/**
- * 把条目里除身份字段外的所有内容组装成长文本（【标签】+ 内容/条目列表）。
- * 按 JSON 原有键序输出，保证与简历原文阅读顺序一致。
- */
-function composeSections(entry: Rec, skip: Set<string>): string {
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(entry)) {
-    if (skip.has(key)) continue;
-    const label = SECTION_LABELS[key] ?? key;
-    const text = str(value);
-    if (text) {
-      parts.push(`【${label}】${text}`);
-      continue;
-    }
-    const items = asList(value);
-    if (items.length > 0) {
-      parts.push(`【${label}】\n${items.map((l) => `· ${l}`).join("\n")}`);
-    }
-  }
-  return parts.join("\n\n");
-}
-
-const INTERNSHIP_SKIP = new Set([
-  "company", "department", "position",
-  "start_date", "startDate", "end_date", "endDate",
-  "描述", "description", "descriptionShort", "descriptionMedium", "descriptionLong",
-]);
-
-const CAMPUS_SKIP = new Set([
-  "organization", "department", "position",
-  "start_date", "startDate", "end_date", "endDate",
-  "描述", "description", "descriptionShort", "descriptionMedium", "descriptionLong",
-]);
-
 function mapCampus(v: unknown): CampusExperienceEntry[] {
   const list = Array.isArray(v) ? v.filter(isRec) : [];
   return list.map((e) => {
-    const resp = asList(e["工作职责"] ?? e.responsibilities);
+    const resp = asList(e["工作职责"] ?? e["岗位职责"] ?? e["职责"] ?? e.responsibilities);
     const workContent = asList(e["工作内容"] ?? e.work_content ?? e.workContent);
-    const achievements = asList(e["工作业绩"] ?? e.achievements);
-    const summary = str(e["总结/收获"] ?? e.summary);
+    const achievements = asList(e["工作业绩"] ?? e["主要业绩"] ?? e["成果"] ?? e.achievements);
+    const summary = str(e["总结/收获"] ?? e["总结"] ?? e["概述"] ?? e.summary);
     const desc = pickDesc(e);
     return {
       organization: s(e, ["组织", "organization", "org", "club", "society", "student_organization"]),
@@ -214,7 +164,7 @@ function mapCampus(v: unknown): CampusExperienceEntry[] {
       position: s(e, ["职务", "position", "role"]),
       startDate: s(e, ["开始时间", "开始", "start_date", "startDate"]),
       endDate: s(e, ["结束时间", "结束", "end_date", "endDate"]),
-      description: desc || composeSections(e, CAMPUS_SKIP),
+      description: desc,
       // 语义槽位：表单问什么填什么（工作职责/工作内容/业绩/总结各自独立）
       responsibilities: resp.join("\n"),
       workContent: workContent.join("\n"),
@@ -229,10 +179,10 @@ function mapCampus(v: unknown): CampusExperienceEntry[] {
 function mapInternships(v: unknown): InternshipEntry[] {
   const list = Array.isArray(v) ? v.filter(isRec) : [];
   return list.map((e) => {
-    const resp = asList(e["工作职责"] ?? e.responsibilities);
+    const resp = asList(e["工作职责"] ?? e["岗位职责"] ?? e["职责"] ?? e.responsibilities);
     const workContent = asList(e["工作内容"] ?? e.work_content ?? e.workContent);
-    const achievements = asList(e["工作业绩"] ?? e.achievements);
-    const summary = str(e["总结/收获"] ?? e.summary);
+    const achievements = asList(e["工作业绩"] ?? e["主要业绩"] ?? e["成果"] ?? e.achievements);
+    const summary = str(e["总结/收获"] ?? e["总结"] ?? e["概述"] ?? e.summary);
     const desc = pickDesc(e);
     return {
       company: s(e, ["公司", "company"]),
@@ -240,7 +190,7 @@ function mapInternships(v: unknown): InternshipEntry[] {
       position: s(e, ["职务", "岗位", "position", "role"]),
       startDate: s(e, ["开始时间", "开始", "start_date", "startDate"]),
       endDate: s(e, ["结束时间", "结束", "end_date", "endDate"]),
-      description: desc || composeSections(e, INTERNSHIP_SKIP),
+      description: desc,
       // 语义槽位：表单问什么填什么（工作职责/工作内容/业绩/总结各自独立）
       responsibilities: resp.join("\n"),
       workContent: workContent.join("\n"),
@@ -252,28 +202,23 @@ function mapInternships(v: unknown): InternshipEntry[] {
   });
 }
 
-const PROJECT_SKIP = new Set([
-  "name", "type", "role",
-  "start_date", "startDate", "end_date", "endDate",
-  "描述", "description", "descriptionShort", "descriptionMedium", "descriptionLong",
-]);
-
 function mapProjects(v: unknown): ProjectEntry[] {
   const list = Array.isArray(v) ? v.filter(isRec) : [];
   return list.map((e) => {
     const roleArr = asList(e["角色"] ?? e.role);
-    const features = asList(e["项目内容"] ?? e.core_features);
+    const features = asList(e["项目内容"] ?? e.workContent ?? e.work_content ?? e.core_features);
     const resp = asList(e["项目职责"] ?? e.responsibilities);
     const achievements = asList(e["项目成果"] ?? e.achievements);
     const background = s(e, ["项目背景", "background", "background_intro"]);
-    const summary = str(e["项目概述/总结"] ?? e.summary);
+    const summary = str(e["项目概述/总结"] ?? e["项目概述"] ?? e["项目总结"] ?? e["概述"] ?? e.summary);
     const desc = pickDesc(e);
     return {
       name: s(e, ["项目名称", "name"]),
+      link: s(e, ["项目链接", "项目网址", "link", "url", "projectLink", "project_link"]),
       role: roleArr.join("、"),
       startDate: s(e, ["开始时间", "开始", "start_date", "startDate"]),
       endDate: s(e, ["结束时间", "结束", "end_date", "endDate"]),
-      description: desc || composeSections(e, PROJECT_SKIP),
+      description: desc,
       keywords: dedupe([...asList(e["关键词"]), str(e.type), ...roleArr]),
       // 语义槽位：项目背景/职责/内容/成果/总结各自独立
       background,

@@ -10,6 +10,8 @@ import { classifyQuestion } from "../answering/questionClassifier";
 import { classifyApplicationContext } from "../context/applicationContext";
 import { fieldFullLabel } from "../core/fieldLabels";
 import { matchSiteRule, type SiteFieldRule } from "../site/siteMemory";
+import { normalizeDate } from "../content/domUtils";
+import { dateChoiceNumber } from "../utils/dateChoice";
 
 export interface ScanPipelineOptions {
   /** Stage 6.5：Effective Profile Pack（variantType/experienceOrder/fieldContents 接线 resolver） */
@@ -44,6 +46,22 @@ export function numberValueFitsStep(value: string, step: number | null | undefin
 
 /** 数字控件的取值适配（年份框要 2026 而不是 2026.06）；适配后仍不合规就保持原值 */
 function finalValueForControl(value: ResolvedValue | undefined, raw: RawField): ResolvedValue | undefined {
+  if (value && raw.context.datePart && /\.(?:startDate|endDate|birthDate)$/.test(value.fieldId)) {
+    const normalized = normalizeDate(value.value);
+    const parts = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/.exec(normalized);
+    const part = raw.context.datePart;
+    const precision = raw.context.datePrecision ?? part;
+    if (!parts || (parts[2] && (Number(parts[2]) < 1 || Number(parts[2]) > 12)) || (precision !== 'year' && !parts[2]) || (precision === 'day' && !parts[3])) return undefined;
+    if (parts[3]) {
+      const date = new Date(Date.UTC(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])));
+      if (date.getUTCFullYear() !== Number(parts[1]) || date.getUTCMonth() + 1 !== Number(parts[2]) || date.getUTCDate() !== Number(parts[3])) return undefined;
+    }
+    const number = Number(parts[part === 'year' ? 1 : part === 'month' ? 2 : 3]);
+    if (!Number.isFinite(number)) return undefined;
+    const matches = raw.options.filter(option => dateChoiceNumber(option, part) === number);
+    const adapted = raw.options.length ? matches.length === 1 ? matches[0] : undefined : String(number);
+    return adapted ? { ...value, value: adapted } : undefined;
+  }
   if (!value || raw.kind !== "number") return value;
   const adapted = adaptValueToNumberControl(value.value, raw.context);
   if (!adapted || adapted === value.value) return value;
@@ -215,6 +233,7 @@ export function runScanPipeline(
   // 不做分配会让所有重复块都填第一条数据（错位）。每 id 独立计数，字段集合不齐时依然对齐。
   const entryCounters = new Map<string, number>();
   const blockEntries = new Map<string, Map<string, number>>();
+  const dateEntries = new Map<string, Map<string, number>>();
   const siteRules = options.siteRules ?? [];
   for (const raw of rawFields) {
     // Application Context Gate 前置短路（issue-004）：非申请控件必须在多条目轮转计数之前剔除，
@@ -324,7 +343,9 @@ export function runScanPipeline(
       const def = getCanonicalFieldDef(match.fieldId);
       if (def?.multiEntry) {
         const collectionKey = `${raw.frameId ?? 0}|${match.fieldId.split(".")[0]}`;
-        if (raw.context.entryGroup) {
+        if (Number.isSafeInteger(raw.context.entryOrdinal) && raw.context.entryOrdinal! >= 0) {
+          entryIndex = raw.context.entryOrdinal;
+        } else if (raw.context.entryGroup) {
           const blocks = blockEntries.get(collectionKey) ?? new Map<string, number>();
           if (!blocks.has(raw.context.entryGroup)) blocks.set(raw.context.entryGroup, blocks.size);
           blockEntries.set(collectionKey, blocks);
@@ -332,8 +353,15 @@ export function runScanPipeline(
         } else {
           const counterKey = `${raw.frameId ?? 0}|${match.fieldId}`;
           const n = entryCounters.get(counterKey) ?? 0;
-          entryCounters.set(counterKey, n + 1);
-          entryIndex = n;
+          if (raw.context.dateGroup) {
+            const groups = dateEntries.get(counterKey) ?? new Map<string, number>();
+            if (!groups.has(raw.context.dateGroup)) { groups.set(raw.context.dateGroup, n); entryCounters.set(counterKey, n + 1); }
+            dateEntries.set(counterKey, groups);
+            entryIndex = groups.get(raw.context.dateGroup);
+          } else {
+            entryCounters.set(counterKey, n + 1);
+            entryIndex = n;
+          }
         }
       }
     }
@@ -412,5 +440,19 @@ export function runScanPipeline(
     }
   }
 
+  const dateGroups = new Map<string, CandidateField[]>();
+  for (const candidate of candidates) {
+    if (!candidate.raw.context.dateGroup || !candidate.raw.context.datePart) continue;
+    const key = `${candidate.raw.frameId ?? 0}|${candidate.match.fieldId}|${candidate.raw.context.dateGroup}`;
+    const group = dateGroups.get(key) ?? []; group.push(candidate); dateGroups.set(key, group);
+  }
+  for (const group of dateGroups.values()) {
+    if (group.length < 2 || group.every(c => c.value && c.status === 'ready')) continue;
+    for (const candidate of group.filter(c => c.status === 'ready')) {
+      candidate.value = undefined;
+      candidate.status = 'manual';
+      candidate.riskReason = '该日期的年月日未全部匹配，保留整组原值，请人工核对';
+    }
+  }
   return candidates;
 }
