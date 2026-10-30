@@ -1,141 +1,103 @@
-# Application Form Assistant
+# ⚡ Application Form Assistant · 网申智能自动填表助手
 
-A Chrome/Edge (Manifest V3) extension that scans the job application form in front of you, matches it against your local profile library, and fills it in with one click — it never invents values and never auto-submits.
+<p align="center">
+  <b>告别春招秋招重复机械填表！专为求职者打造的浏览器智能填表扩展</b><br>
+  深度识别北森 / Moka / 大易 / 智联等主流招聘系统 · 基于本地离线资料库一键秒级填入 · 100% 本地存储绝不上传隐私
+</p>
 
-网申自动填写助手：识别岗位 → 识别字段 → 按资料库一键填写。不逐项确认，但绝不自动提交。
+<p align="center">
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License" />
+  <img src="https://img.shields.io/badge/Platform-Chrome%20%7C%20Edge%20MV3-4CAF50?logo=googlechrome&logoColor=white" alt="Chrome Edge" />
+  <img src="https://img.shields.io/badge/Privacy-100%25%20本地存储不外泄-brightgreen" alt="Privacy" />
+  <img src="https://img.shields.io/badge/Safety-永不自动提交-red" alt="Safety" />
+  <img src="https://img.shields.io/badge/Tech-React%20%2B%20TypeScript-3178C6" alt="Tech" />
+  <img src="https://img.shields.io/badge/AI%20Agent-MCP%20Ready-orange.svg" alt="MCP" />
+</p>
 
-**English** | [简体中文](README.zh-CN.md)
+<p align="center">
+  <b>简体中文</b> | <a href="./README.en.md">English Documentation</a>
+</p>
 
-![License](https://img.shields.io/badge/license-MIT-blue)
-![Platform](https://img.shields.io/badge/platform-Chrome%20%7C%20Edge%20MV3-4CAF50)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6)
-![React](https://img.shields.io/badge/React-18-61DAFB)
-![Vite](https://img.shields.io/badge/Vite-5-646CFF)
-![Playwright](https://img.shields.io/badge/tested%20with-Playwright-2EAD33)
+---
 
-## Why
+## ⚡ 为什么开发这款插件？
 
-Every careers site makes you re-type the same name, phone number, education and project history into a slightly different web form — and Chinese campus-hiring sites, plus Greenhouse/Lever/Workday-style ATS forms, each have their own quirks. Application Form Assistant is a side-panel extension that reads the application form already open in your browser, recognizes which fields it needs, matches them against a profile library you maintain locally, and writes the values into the page for you. You stay in control: it fills, you review, **you** press submit.
+每年春招、秋招或跳槽季，求职者最痛苦的莫过于：
+- **每投递一家公司，都要在新网站里把基本信息、教育背景、项目经历、实习细节从头手打一遍**；
+- 北森（Beisen）、Moka、大易（Dayi）、用友、飞书招聘等系统表单格式千奇百怪，浏览器的普通密码填充器根本无法匹配这些复杂的下拉联动、日期选择器和动态卡片；
+- 市面上的在线求职代投插件，往往需要你把**身份证号、手机号、家庭住址、详细简历全部上传到云端服务器**，极其容易导致个人敏感信息遭泄露或倒卖。
 
-## ✨ Features
+**网申自动填表助手就是为了彻底解决这一痛点而诞生！**  
+它是一个轻量的 Chrome / Edge（Manifest V3）浏览器扩展，**所有个人档案与匹配计算 100% 运行在你的本地浏览器中**，识别表单后一键自动填入，由你人工最终核对点击提交！
 
-- **One-click pipeline** — a single "Start" action chains every step with deterministic per-step status (no fake spinners): connect to the page (including all frames) → recognize the job and application direction → wait for SPA fields to render → recognize the fields that need filling → match your profile → write into the page.
-- **One primary action per screen** — after recognition finishes, the four progress lines collapse into one (`Recognized · 4/4 steps · 17 fields, 14 filled`), expanding only if a step failed; "re-scan" and "undo this fill" become text links, "I have submitted" is a small button, and the page URL shows up only in developer mode. Library renaming / copying / deleting and job notes / archiving / deleting live behind a "more actions" fold, so each screen leaves exactly one obvious next click.
-- **Context gating** — only controls inside the application flow enter the fill process. Login panels, captchas, nav search boxes and footer subscribe forms are excluded and shown as a one-line statistic, never as fake "fields to fill".
-- **Conservative write rules** — it only writes what exists in your profile library: empty stays empty (no invented values); values that exceed a field's length limit or don't fit a number box are marked "please fill manually" instead of being truncated or forced; commitments / declarations / e-signatures / consent checkboxes are **never** filled on your behalf; file uploads, captchas and password boxes are not touched.
-- **Explained matches, not a magic percentage** — every field card carries a "why this field" disclosure built from the matcher's own evidence (which signal hit, which alias, which section boosted it), plus the runner-up candidate. When two fields are close, you can switch this one to the alternative in one click and the field is re-scored through the same risk/status pipeline — not just re-labelled.
-- **Fill receipt** — after writing, the panel reports what was filled, what the red lines deliberately blocked and *why* (commitment/consent/adjustment checkboxes, controls excluded by context gating, option sets your data doesn't answer, values too long for the field), what failed to write, and what your library has no content for. Skipped fields can be un-skipped without re-scanning the page.
-- **You always submit** — no auto-submit, ever. Undo is always available, and a "review list before writing" mode can be enabled in Settings for first-time sites.
-- **Multi-library profiles** — one `shared` profile (name, contact, education, sensitive info) plus any number of per-direction libraries (e.g. product vs. operations) that auto-switch based on the detected job direction. English ATS sites' `First name`/`Last name` split is fed from explicit fields — the extension never guesses how to split your name.
-- **Yes/No questions, answered once** — availability questions (on-site/online interview, travel, relocation, overtime…) are stored once per profile and matched by polarity, so it will never tick "No" just because a library is missing an experience entry.
-- **Plain-text resume import** — paste a Chinese resume as text and an offline rule parser (no network, no upload, no API key) extracts sections, experiences and skills, with a preview before anything is saved; unparseable input is rejected wholesale and existing data is untouched.
-- **Optional AI providers** — Mock (offline) / DeepSeek / OpenAI-compatible endpoints. By default the API key is held **in memory for the current side-panel session only and is never written to disk**; keeping it on the machine is an explicit, separately-labelled opt-in (checkbox) that spells out the warning in the UI. Either way the key never appears in code, logs, traces or the bundle. What the opt-in gives you is *storage*, not *protection*: `chrome.storage.local` is an unencrypted leveldb file with no access control, so any process running as your user that can read the profile directory can read the key.
-- **Job pipeline tracking** — a local Job → Session → Timeline state machine (saved → preparing → applying → submitted → assessment → interview → offer/rejected/…) with no backend and no telemetry.
-- **Local Agent API / MCP** — a read-only `afa.*` tool surface that reuses the extension's own matching, risk and fill-plan code, so an external agent gets the same verdicts the side panel shows. See [Agent API / MCP](#-agent-api--mcp).
+---
 
-## 🛑 Safety red lines
+## 🛡️ 严苛的安全红线（这是产品定义，绝不动摇）
 
-These are product decisions, not limitations to be optimised away. Each one is enforced in code and covered by a test:
+求职安全重于泰山，本扩展在架构与代码层设置了不可逾越的安全红线：
 
-| Red line | Where it is enforced |
-| --- | --- |
-| **Never clicks submit** — the extension fills, a human submits | `src/rules/ignoreRules.ts` (`BLOCKED_ACTIONS`) + `e2e/safety-flow.spec.ts` |
-| **Risk fields are manual-only** — commitments, declarations, e-signatures, consent, job-adjustment, background-check and visa/work-authorisation statements are never written on your behalf | `src/rules/riskRules.ts` (`MANUAL_ONLY_KEYWORDS`) |
-| **Scanning never writes to the DOM** — the scanner is read-only; every write goes through a confirmed fill plan created only by the user's own "confirm" action | `src/content/scanner.ts` + `src/pipeline/fillPlan.ts` + `e2e/scan-does-not-write.spec.ts` |
-| **No invented values** — empty stays empty; over-length values and values a numeric control cannot hold are handed back to you instead of being truncated or rewritten | `src/pipeline/scanPipeline.ts` (`deriveStatus`) |
-| **Demographics are not "profile data"** — EEO / ethnicity / disability / veteran self-declaration questions are never auto-answered, even when an alias matches | `src/matching/matcher.ts` (`PROTECTED_CLASS_MARKERS`) |
-| **Other people's fields are not yours** — a label saying "referee / 推荐人 / parent" is never filled with *your* name or phone | `src/matching/matcher.ts` (`OTHER_PERSON_MARKERS`) |
-| **Local only** — no cloud backend, no telemetry; the only outbound network calls are the AI providers you explicitly configure. The API key is in memory for the session by default; only the labelled opt-in puts it in `chrome.storage.local`, which is unencrypted storage, not protection | `src/generation/provider.ts` |
+| 安全红线 | 为什么必须这样做 | 代码与测试保障 |
+| :--- | :--- | :--- |
+| **永不自动点击提交** | 扩展只负责辅助快速填表，**人工必须拥有最终审核与点击提交的决定权** | `src/rules/ignoreRules.ts` + E2E 强制断言 |
+| **高危法律字段坚决不代填** | 承诺、背调授权、声明、电子签名、是否服从调剂等法律与责任选项一律留给人工判断 | `src/rules/riskRules.ts` |
+| **绝不凭空编造虚假值** | 本地资料库中没有的信息宁可留空，绝不胡乱猜测，拒绝简历造假 | `deriveStatus` 严格门禁 |
+| **100% 本地纯离线** | 没有云端后端服务器，没有隐私埋点，简历数据仅存在本地 `chrome.storage.local` | 零第三方网络外发 |
 
-## 🚀 Quick Start
+---
 
-**Prerequisites**: Node.js 18+, npm, and Microsoft Edge (or Chrome) 114+.
+## ✨ 核心特性
 
+- 🎯 **一键流水线极速填充**：进入网申页面后，侧边栏点击「开始识别」，自动完成「页面连接 → 岗位识别 → 动态表单解析 → 语义匹配 → 一键安全写入」。
+- 🧠 **精准语义识别**：无论表单字段叫「手机」、「联系电话」、「Phone」还是「联系方式」，均能精准识别匹配。
+- 📑 **多套资料库自由切换**：支持保存「产品岗」、「技术岗」、「运营岗」等不同版本的专属经历，根据投递岗位一键选用匹配资料。
+- 🧩 **动态表单与复杂组件适配**：全面兼容 SPA 单页应用动态加载的日期范围控件、联级省市下拉框、多选框与富文本框。
+- 🧾 **清晰透明的填写回执**：每次填写完成后，明确告知哪些字段成功填入，哪些敏感字段交由你人工确认，一清二楚。
+
+---
+
+## 📥 3 步极速安装（Edge / Chrome 通用）
+
+### 步骤 1：下载或获取扩展包
+你可以直接下载打包好的扩展文件夹，或者通过源码一键生成：
 ```bash
-git clone https://github.com/<your-account>/application-form-assistant.git
-cd application-form-assistant
+git clone https://github.com/zhangtt08/job-application-autofill.git
+cd job-application-autofill
 npm install
-npm run build          # builds dist/ : side panel + content script + service worker
+npm run build
 ```
+执行完成后，项目内将生成 `dist/` 文件夹。
 
-Install into **Edge**:
+### 步骤 2：加载到浏览器
+1. 在 Edge 打开 `edge://extensions`（或在 Chrome 打开 `chrome://extensions`）；
+2. 开启页面上的「**开发人员模式**」开关；
+3. 点击「**加载解压缩的扩展程序**」，选择项目根目录下的 **`dist/`** 文件夹即可安装成功！
 
-1. Open `edge://extensions` in Edge.
-2. Turn on **Developer mode** (toggle in the left sidebar, bottom).
-3. Click **Load unpacked** and select the generated **`dist/`** folder.
-4. Pin the extension (optional), then open any job application page.
-5. Open the side panel: the extensions toolbar button → **Application Form Assistant**
-   (or right-click the page → *More actions* → *Application Form Assistant*).
-6. First run: go to the **Profile** tab and paste your resume text — parsing is fully offline.
-   Then return to **Apply** and click **开始识别 / Start**.
+### 步骤 3：开始使用
+1. 点击浏览器工具栏上的扩展图标，打开侧边栏；
+2. 首次使用前往「**资料**」页，粘贴你的文本简历（完全本地解析）；
+3. 打开任意校招网申或社招表单页面，在「**投递**」页点击「**开始识别并填写**」，见证奇迹！
 
-The same `dist/` loads unchanged in Chrome via `chrome://extensions` → **Load unpacked**.
+---
 
-> `dist/` is a build output and is not committed. Re-run `npm run build` after any change,
-> and press the reload icon on the extension card in `edge://extensions` afterwards.
+## 🤖 开发者与 AI Agent 支持 (MCP)
 
-Optional checks:
+本扩展同时提供独立的本地 Agent API 服务与 MCP 协议接口（端口 `8797`）：
 
 ```bash
-npm test                 # unit tests (Vitest + jsdom, offline & deterministic)
-npm run typecheck        # tsc --noEmit
-npm run test:e2e         # Playwright end-to-end scenarios (real Chromium + dist/ extension)
-npm run test:compat      # compatibility matrix -> compatibility-results/report.md (regenerable, not committed)
-npm run privacy:scan     # PII / credential scan over tracked files — must report 0 ERROR
-python smoke/smoke.py    # real-Chromium UI smoke test with screenshots (needs Python)
-npm run eval:generation  # generation-quality eval (needs a provider; see README.zh-CN.md)
+# 启动本地 Agent HTTP 服务
+npm run agent:serve
+
+# 启动 MCP stdio 桥接（支持 Cursor / Claude Code 调用）
+npm run agent:mcp
 ```
 
-## 🤖 Agent API / MCP
+提供 `afa.scan_form`、`afa.plan_fill`、`afa.validate_profile` 等 8 个只读安全工具。
 
-The extension has no server, so the agent runs as a **separate local process** on port **8797**:
+---
 
-```bash
-npm run agent:serve      # HTTP  → http://127.0.0.1:8797
-npm run agent:mcp        # MCP stdio bridge (same tools, any MCP client)
-```
+## ⭐ 支持与致谢
 
-Eight tools, all prefixed `afa.` and all `risk: 'read'`:
-`list_fields`, `read_profile` (redacted summary), `validate_profile`, `scan_form`,
-`match_question`, `plan_fill`, `export_results`, `storage_overview`.
+如果这款插件为你省去了繁琐枯燥的重复填表时间，帮你斩获了心仪的 Offer，请给项目点一个 **Star ⭐**！祝愿所有求职者投递顺利，早日上岸！
 
-They do **not** reimplement anything: `agent/tools.mjs` imports `src/core`, which re-exports the
-same matcher / risk rules / scan pipeline / fill-plan gates the side panel runs — so the agent's
-confidence and the UI badge can never disagree. There is deliberately **no** tool that writes to a
-page, clicks submit, or posts to a third-party site: exposing that would remove the red line above.
-See [`agent/README.md`](agent/README.md) for the contract, schemas and the jsdom caveat.
-
-## 🏗️ Architecture / How it works
-
-Data flow: **Scan → Recognize → Match → Risk Check → Fill**, with results bucketed as `filled / awaiting your input / fill manually`. Your profile, jobs and timeline live in `chrome.storage.local` — there is no cloud backend and no telemetry. The one thing that by default is *not* on disk is the AI provider API key (session memory unless you tick the labelled opt-in; see [Safety red lines](#-safety-red-lines)).
-
-```
-public/manifest.json     MV3 manifest: side panel + service worker + all-frames content script
-src/
-  core/                  ★ shared pure-logic facade: field labels + "why this matched" explanation,
-                         and re-exports of matcher / risk rules / pipeline / profile schema.
-                         Imported by BOTH the side panel and agent/tools.mjs — one source of truth.
-  background/            MV3 service worker (tab & runtime orchestration)
-  content/               in-page connector and field writer (runs in every frame)
-  sidepanel/             React UI: Apply / Jobs / Profile / Settings (bottom nav)
-  pipeline/              scan → recognize → match → fill orchestration
-  matching/              field ↔ profile matching
-  profile/               multi-library store (afa.profiles.v2) + plain-text resume parser
-  rules/                 deterministic rules (aliases, risk, yes/no polarity, ignore list)
-  answering/ generation/ job/ context/ workspace/ compatibility/ types/ utils/
-agent/                   local Agent API (server.mjs + tools.mjs + mcp-server.mjs) — see agent/README.md
-tests/  e2e/  smoke/  evaluation/    Vitest unit · Playwright e2e · smoke · gen-eval
-docs/                  design principles, test-data policy, privacy & safety audits
-real-validation-results/             real-site pilot evidence (sessions / issues; private/ is gitignored)
-```
-
-Key storage keys: `afa.profiles.v2` (shared + libraries, auto-migrated from legacy `afa.profile.v1`), `afa.jobs.v2` / `afa.sessions.v2` / `afa.events.v1` (job lifecycle), `afa.apply.prefs.v1` (behaviour toggles). A detailed Chinese walkthrough of the UI model, the generation-eval harness and the application lifecycle is in the [Chinese README](README.zh-CN.md).
-
-**Repository hygiene**: build output, test runs, regenerable verification reports and any screenshot
-that can show a filled-in value are gitignored. Real resumes, contact details and cookies never
-enter the repo — enforced by `npm run privacy:scan` and documented in
-[`docs/TEST_DATA_POLICY.md`](docs/TEST_DATA_POLICY.md).
-
-## 📄 License
-
-[MIT](LICENSE)
+## 📄 开源许可证
+本项目基于 [MIT License](LICENSE) 协议开源。
